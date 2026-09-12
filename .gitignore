@@ -1,0 +1,33 @@
+# Python / uv
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Project outputs (never committed)
+*.scoria/
+clips/
+previews/
+temp_work/
+
+# Whisper models (binary; checksum + model id recorded in manifest.json instead)
+model/*.bin
+models/*.bin
+*.ggml*.bin
+
+# Env / secrets
+.env
+.env.*
+*.local
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
