@@ -1,0 +1,4 @@
+version: 1
+audio:
+  silence:
+    min_duration: 3.0

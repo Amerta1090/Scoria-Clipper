@@ -1,0 +1,3 @@
+# S0 fixtures: bad configs exercising the validation rules in CONFIGURATION.md §3.
+version: 1
+surprise_key: true

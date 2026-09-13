@@ -75,12 +75,15 @@ detected and flagged rather than silently changing output.
 | Tool | Role | Arch |
 |---|---|---|
 | `uv` | env + lock (`uv sync`, `uv tool install`) | `curl -LsSf https://astral.sh/uv/install.sh | sh` |
-| `ruff` | lint+format | dev dependency via uv |
-| `pytest` | tests | dev dependency via uv |
-| `typer` + `rich` | CLI + pretty output | via uv |
-| `pydantic v2` | config/contract validation | via uv |
+| `ruff` | lint+format | `dependency-groups.dev` via uv (ADR-012) |
+| `pytest` + `pytest-cov` | tests | `dependency-groups.dev` via uv (ADR-012) |
+| `typer` + `rich` | CLI + pretty output | runtime deps via uv |
+| `pydantic v2` | config/contract validation | runtime dep via uv |
+| `PyYAML` | config-file parsing (ADR-011) | runtime dep via uv |
 
-`ruff`/`pytest`/`typer`/`pydantic` are Python deps gated behind a `dev` extra; runtime deps = numpy + (ffmpeg/whisper.cpp binaries, not pip).
+Runtime Python deps = numpy, pydantic, PyYAML, typer, rich (binaries ffmpeg/whisper.cpp are not pip). Dev tooling
+(ruff/pytest/pytest-cov) lives in a PEP 735 `[dependency-groups] dev` block: installed by default with `uv sync`,
+skipped in production with `uv sync --no-dev`.
 
 ## 5. Language trade-off (why not Rust)
 

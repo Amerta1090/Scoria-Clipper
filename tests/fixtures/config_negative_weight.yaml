@@ -1,0 +1,4 @@
+version: 1
+scoring:
+  weights:
+    audio_energy: -0.5

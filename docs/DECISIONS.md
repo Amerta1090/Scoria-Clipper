@@ -65,9 +65,22 @@ decisions are superseded, never edited retroactively.
 - **Consequences:** Golden-file diffs are meaningful; scripts can hash artifacts.
 - Status: **Accepted**.
 
+## ADR-011 — PyYAML as the config-file parser
+- **Context:** CONFIGURATION.md defines config as YAML. Options: PyYAML (de-facto standard, pure-Python wheel, BSD), ruamel.yaml (round-trip preservation, heavier), or a hand-rolled subset parser. We only read YAML — we never need to rewrite user config files.
+- **Decision:** `yaml.safe_load` via PyYAML only (`load_yaml` in `config/load.py`); a non-mapping or unparseable file raises `ConfigError` (exit 2). `safe_load` avoids arbitrary object construction.
+- **Consequences:** One more runtime dep (small, pure-Python); writer side never needs YAML round-trip, so `dump_yaml` is a one-way `safe_dump` for `config show`/`write-defaults`.
+- Status: **Accepted**.
+
+## ADR-012 — Runtime deps minimal + PEP 735 `dependency-groups` for dev tooling
+- **Context:** ADR-001 gates dev deps behind a dev "extra". `uv` treats `[project.optional-dependencies].dev` as an optional extra (installed only with `--extra dev`), which silently breaks `uv sync && pytest`. Runtime deps must stay minimal: numpy, pydantic, PyYAML, typer, rich.
+- **Decision:** Dev tooling (ruff, pytest, pytest-cov) moves to a PEP 735 `[dependency-groups] dev = [...]`, which `uv sync` installs by default and `uv sync --no-dev` (production/CI runtime) skips. Runtime deps are enumerated in DEPENDENCIES.md §1/§4.
+- **Consequences:** Fresh clones get a working test env from plain `uv sync`; the runtime surface is still exactly the five declared packages; `--locked` CI is deterministic.
+- Status: **Accepted**.
+
 ---
 
 ## Open questions
 1. Default output vertical (9:16) even for portrait 4:3 sources — decided yes (blur-pad), but keep `--no-vertical` escape.
 2. Whether S4's folded-in "minimal scene detection" should formally become a `visual/` module in S2 rather than S4 — see SPRINT_PLANNING §Sequencing notes; will be revisited during Sprint 4 spikes.
 3. `espeak-ng` for spoken fixture media — optional test-only dependency; decide in Sprint 3 whether fixtures are static JSON or need audio generation.
+4. CONFIGURATION.md §3's caption-readability rule (`captions.max_duration ≥ (chars_per_line·max_lines)/(wpm/60)`) was **not** implemented in the Sprint 0 config schema: the shipped defaults (`max_duration: 4.5`) contradict it, and it is really Sprint 7 (captions) logic. Decide at Sprint 7 whether to adopt it (then adjust defaults) or drop the rule; needs an ADR either way.

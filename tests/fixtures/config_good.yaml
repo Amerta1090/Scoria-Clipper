@@ -1,0 +1,9 @@
+version: 1
+media:
+  frame:
+    width: 96
+    height: 54
+captions:
+  chars_per_line: 40
+  max_lines: 2
+  max_duration: 4.5

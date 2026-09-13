@@ -1,0 +1,7 @@
+version: 1
+segment:
+  min_duration: 50.0
+  preferred:
+    min: 35.0
+    max: 45.0
+  max_duration: 60.0

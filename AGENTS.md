@@ -10,5 +10,6 @@ Ground truth docs live in `docs/` (see the list in `prompt.md`). `docs/DECISIONS
 Quick start for a session: `git log --oneline -12` → `SPRINT_STATUS.md` → work the current sprint →
 `ruff` + `pytest` → commit → update SPRINT_STATUS.
 
-Environment note: this machine is Arch-based (Archcraft) with ffmpeg 9.0.1 preinstalled; whisper.cpp and
-uv are not installed yet (see `docs/DEPENDENCIES.md`).
+Environment note: this machine is Arch-based (Archcraft) with ffmpeg 9.0.1 preinstalled and uv 0.12.13
+installed at `~/.local/bin/uv` (run `export PATH="$HOME/.local/bin:$PATH"` before using uv). whisper.cpp is
+not installed yet — see `docs/DEPENDENCIES.md`.

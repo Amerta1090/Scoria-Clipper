@@ -1,0 +1,5 @@
+version: 1
+reframe:
+  output:
+    width: 1000
+    height: 1920
