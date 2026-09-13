@@ -46,10 +46,10 @@ def test_one_shot_run_stub_exits_one():
     assert "not implemented" in result.output
 
 
-def test_stage_stub_analyze_exits_one():
+def test_analyze_missing_input_exits_one():
     result = runner.invoke(app, ["analyze", "video.mp4"])
     assert result.exit_code == 1
-    assert "not implemented" in result.output
+    assert "input not found" in result.output.lower()
 
 
 def test_unknown_flag_exits_two():

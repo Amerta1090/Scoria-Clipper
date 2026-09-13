@@ -52,7 +52,7 @@ scoria/
 
 Design rules:
 - Sub-score functions live in `score/` modules as **pure functions** `f(feature_vector_slice) -> float`, one per signal. Zero I/O. This is what makes unit testing + determinism trivial.
-- The ffmpeg runner in `util/` centralizes every subprocess invocation (fixed arg order, `-nostdin`, env pinning, failure reporting). No module shells out on its own.
+- The ffmpeg runner in `util/` centralizes every subprocess invocation (fixed arg order, env pinning, failure reporting). `-nostdin` is pinned on `run_ffmpeg`; `run_ffprobe` omits it because this ffprobe build (n9.0.1) rejects the flag and ffprobe only reads stdin when given `-` as input (ingest always probes a spooled file). No module shells out on its own.
 - All file writing goes through `project/` so the serialization contract (sorted keys, float precision) is enforced in one place.
 
 ## 4. Pipeline (data flow)

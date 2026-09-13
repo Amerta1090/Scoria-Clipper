@@ -34,7 +34,7 @@ def _round_float(value: float) -> float:
 def normalize(obj: Any) -> Any:
     """Recursively convert to a plain, contract-safe structure (no numpy, pydantic, / tuples)."""
     if isinstance(obj, BaseModel):
-        obj = obj.model_dump(mode="python")
+        obj = obj.model_dump(mode="python", by_alias=True)
     if isinstance(obj, dict):
         return {str(key): normalize(value) for key, value in obj.items()}
     if isinstance(obj, (list, tuple)):

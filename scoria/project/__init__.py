@@ -1,5 +1,11 @@
-"""Project-dir IO: stable JSON serialization contract + manifest writer."""
+"""Project-dir IO: stable JSON serialization contract + manifest writer + dir resolution."""
 
+from scoria.project.dirs import (
+    DEFAULT_TEMP_NAME,
+    prepare_project_dir,
+    project_temp_dir,
+    resolve_project_dir,
+)
 from scoria.project.jsonio import (
     FLOAT_DECIMALS,
     check_contract,
@@ -16,6 +22,7 @@ from scoria.project.manifest import (
 )
 
 __all__ = [
+    "DEFAULT_TEMP_NAME",
     "FLOAT_DECIMALS",
     "MANIFEST_FILENAME",
     "MANIFEST_SCHEMA",
@@ -23,7 +30,10 @@ __all__ = [
     "check_contract",
     "dump_str",
     "normalize",
+    "prepare_project_dir",
+    "project_temp_dir",
     "read_json",
+    "resolve_project_dir",
     "write_json",
     "write_manifest",
 ]

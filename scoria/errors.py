@@ -23,6 +23,12 @@ class PipelineError(ScoriaError):
     exit_code = 1
 
 
+class MediaError(PipelineError):
+    """Input media could not be probed or validated (exit 1), with ffprobe detail."""
+
+    exit_code = 1
+
+
 class MissingDependencyError(PipelineError):
     """A required external tool is absent. Exit 1, with a verify-env hint."""
 

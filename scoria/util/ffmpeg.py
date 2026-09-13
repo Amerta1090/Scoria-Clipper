@@ -18,6 +18,16 @@ from scoria.errors import MissingDependencyError, PipelineError
 FFMPEG_BIN = "ffmpeg"
 FFPROBE_BIN = "ffprobe"
 _VERSION_TIMEOUT = 30
+# Pinned ffprobe surface for ingest (ARCHITECTURE.md §3): every probe run uses exactly
+# these flags + the input path, so metadata extraction is a stable, reproducible call.
+FFPROBE_ARGS: tuple[str, ...] = (
+    "-v",
+    "error",
+    "-print_format",
+    "json",
+    "-show_format",
+    "-show_streams",
+)
 
 
 def _find(binary: str) -> str:
@@ -65,6 +75,34 @@ def run_ffmpeg(
         tail_lines = (proc.stderr or "").strip().splitlines()[-15:]
         tail = "\n".join(tail_lines) if tail_lines else "(no stderr)"
         raise PipelineError(f"{binary} failed with exit {proc.returncode}", hint=tail)
+    return proc
+
+
+def run_ffprobe(
+    args: Sequence[str],
+    *,
+    env: dict[str, str] | None = None,
+    timeout: float | None = None,
+) -> subprocess.CompletedProcess:
+    """Run ffprobe with the pinned JSON surface; raise PipelineError on failure.
+
+    Note: no `-nostdin` — this ffprobe build (n9.0.1) rejects it, and ffprobe only
+    reads stdin when given `-` as input (we never do: ingest always probes a real
+    spooled file). ffmpeg keeps -nostdin; ffprobe is read-only metadata.
+    """
+    path = _find(FFPROBE_BIN)
+    full_args = [path, *FFPROBE_ARGS, *args]
+    proc = subprocess.run(
+        full_args,
+        capture_output=True,
+        text=True,
+        env=env if env is not None else os.environ.copy(),
+        timeout=timeout,
+    )
+    if proc.returncode != 0:
+        tail_lines = (proc.stderr or "").strip().splitlines()[-15:]
+        tail = "\n".join(tail_lines) if tail_lines else "(no stderr)"
+        raise PipelineError(f"ffprobe failed with exit {proc.returncode}", hint=tail)
     return proc
 
 

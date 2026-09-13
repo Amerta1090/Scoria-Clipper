@@ -2,9 +2,11 @@
 
 One-shot `clipper <video> [OPTIONS]` is handled by the entry wrapper in `main()`,
 which rewrites it into the `run` subcommand (CLI_SPEC.md §1); `run` shares the flag
-set with the top-level invocation. Pipeline stages are registered stubs whose help
-matches CLI_SPEC.md; running them raises PipelineError (exit 1). `config` (Sprint 0)
-and `verify-env` are functional.
+set with the top-level invocation. `analyze` (Sprint 1) is functional — it probes
+and validates the input and writes analysis.json + manifest.json. The remaining
+pipeline stage commands are registered stubs whose help matches CLI_SPEC.md;
+running them raises PipelineError (exit 1). `config` (Sprint 0) and `verify-env`
+are functional.
 """
 
 from __future__ import annotations
@@ -20,9 +22,13 @@ from rich.console import Console
 from scoria import envcheck
 from scoria.config import build_config, default_config, dump_yaml
 from scoria.errors import PipelineError, ScoriaError
-from scoria.util.logging import setup_logging
+from scoria.ingest import MediaInfo, analyze_video
+from scoria.project import normalize, write_manifest
+from scoria.util import ffmpeg
+from scoria.util.logging import get_logger, setup_logging
 
 err_console = Console(stderr=True, highlight=False)
+logger = get_logger("analyze")
 
 
 def _handle_error(fn):
@@ -59,6 +65,11 @@ def _not_implemented(stage: str) -> None:
         f"`clipper {stage}` is not implemented yet (Sprints 1–11); "
         "this is the Sprint 0 foundation skeleton"
     )
+
+
+def encode_summary(media: MediaInfo, analysis_path: Path) -> dict:
+    """`--json` stage summary under the serialization contract (rounded floats)."""
+    return {"media": normalize(media), "analysis": str(analysis_path)}
 
 
 def _cli_overrides(
@@ -145,10 +156,50 @@ def run(
 # ---------------------------------------------------------------------------
 
 
-@app.command(help="Produce analysis.json (Sprint 1).")
+@app.command(help="Produce analysis.json — ffprobe metadata + validation (Sprint 1).")
 @_cmd
-def analyze(video: Path) -> None:
-    _not_implemented("analyze")
+def analyze(
+    video: Path = typer.Argument(..., help="Input video (or '-' for stdin)"),
+    output: Path | None = typer.Option(
+        None, "-o", "--output", help="Project dir (default <video>.scoria/)"
+    ),
+    config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
+    profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing project dir"),
+    log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
+):
+    setup_logging(log_level)
+    overrides: dict = {}
+    if output is not None:
+        overrides["project"] = {"dir": str(output)}
+    if overwrite:
+        overrides.setdefault("project", {})["overwrite"] = True
+    cfg = build_config(path=config_path, profile=profile, overrides=overrides)
+    media, project_dir = analyze_video(str(video), cfg)
+    tools = {name: ffmpeg.version(name) for name in ("ffmpeg", "ffprobe")}
+    write_manifest(
+        project_dir,
+        config=cfg,
+        tools=tools,
+        invocation=sys.argv,
+        degraded=[],
+    )
+    analysis_path = project_dir / "analysis.json"
+    logger.info(
+        "media probed: %dx%d %s (%.2fs) -> %s",
+        media.width,
+        media.height,
+        media.aspect_ratio,
+        media.duration,
+        analysis_path,
+        extra={"stage": "analyze", "artifact": str(analysis_path)},
+    )
+    if json_output:
+        summary = json.dumps(
+            encode_summary(media, analysis_path), sort_keys=True, ensure_ascii=False
+        )
+        typer.echo(summary)
 
 
 @app.command(help="Produce raw candidates.json from analysis (Sprint 4).")
