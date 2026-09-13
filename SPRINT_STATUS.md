@@ -4,7 +4,7 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 1 — Ingestion** (status: **done**).
+> Last sprint: **Sprint 1 — Ingestion** (status: **done**, commit `a64bb4d`).
 > Current sprint: **Sprint 2 — Audio analysis** (status: pending).
 > Next action (Sprint 2): `audio/` module — PCM extraction via ffmpeg f32le mono 16k, numpy
 > window RMS/energy/silence, ebur128 integrated loudness, `analysis.json.audio`.
