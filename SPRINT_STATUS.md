@@ -4,14 +4,16 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 1 — Ingestion** (status: **done**, commit `a64bb4d`).
-> Current sprint: **Sprint 2 — Audio analysis** (status: pending).
-> Next action (Sprint 2): `audio/` module — PCM extraction via ffmpeg f32le mono 16k, numpy
-> window RMS/energy/silence, ebur128 integrated loudness, `analysis.json.audio`.
-> Sprint 1 landed: `ingest/` module (`analysis.json.media` contract: stream/duration/AR/timebase
-> normalized to seconds, rotation-aware AR, analysis window), stdin support (spools to project
-> tmp, needs `-o`), actionable MediaError hints, `clipper analyze` + manifest stamping,
-> project-dir/overwrite semantics, L1/L5 tests (75 green).
+> Last sprint: **Sprint 2 — Audio analysis** (status: **done**, commit `13902ae`).
+> Current sprint: **Sprint 3 — Transcript pipeline** (status: pending).
+> Next action (Sprint 3): `transcript/` module — whisper.cpp bridge, sentence grouping, degraded path;
+> decide fixture transcripts vs `espeak-ng` (DECISIONS.md Open Question 3).
+> Sprint 2 landed: `audio/` module — ffmpeg f32le mono 16k PCM to numpy, window RMS/energy (float64,
+> drops partial tail), silence detection (window rms_db < threshold, gap-merge + min-duration filter,
+> offset applied), ebur128 integrated LUFS + true peak (summary block only), peak/clip stats
+> (`peak_threshold: 0.999`), `analysis.json.audio` via `analyze_video`, `clipper analyze` summary
+> includes audio, whole-file-decode-then-slice so staged == exact slice (no ffmpeg seeking),
+> no-audio stream → actionable MediaError, L0/L1/L2/L5 tests (96 green).
 
 ## Milestone
 
@@ -23,7 +25,7 @@ it at session end (same commit as the work or a `chore(status):` commit).
 |---|------|--------|-------|
 | 0 | Foundation | **done** | uv scaffold, config schema, project/ IO, CI, verify-env |
 | 1 | Ingestion | **done** | ffprobe metadata, validation, stdin (analysis.json.media) |
-| 2 | Audio analysis | pending | PCM pass, energy/RMS/silence/loudness |
+| 2 | Audio analysis | **done** | PCM pass, energy/RMS/silence/loudness/peaks (analysis.json.audio) |
 | 3 | Transcript pipeline | pending | whisper.cpp bridge, sentence grouping, degraded path |
 | 4 | Segmentation + candidates | pending | boundary builder, window generator (needs scene list) |
 | 5 | Scoring engine | pending | SCORING_ENGINE.md exact implementation |
@@ -54,6 +56,14 @@ get a DECISIONS.md ADR.)_
   (`Option not found`), and ffprobe only reads stdin when given `-` as input, which ingest never does
   (it always probes a spooled file). Pinned args stay fixed + deterministic. ARCHITECTURE.md §3 updated
   to match; not an ADR (no documented decision overturned).
+- Sprint 2: `scoria/audio/pipeline.py` annotates `media: MediaInfo` but imports it **only under
+  `TYPE_CHECKING`** — the eager import created a real circular chain (`ingest/__init__` → `ingest/pipeline`
+  → `audio/pipeline` → `ingest.models` → `ingest/__init__` partial). Annotations are strings under
+  `from __future__ import annotations`, so type-only import keeps the stage signature `analyze_audio(path, cfg, media)`
+  without a runtime edge into `ingest`. Not an ADR (implementation detail, no stated rule overturned).
+- Sprint 2: ebur128 `I:`/`Peak:` parsed from the **Summary: block only** — the per-window progress lines
+  emit the same `I: … LUFS` pattern (e.g. `-70.0` during leading silence) and would shadow the final
+  integrated reading in a whole-stderr regex search.
 
 ## Known risks / watch items
 
