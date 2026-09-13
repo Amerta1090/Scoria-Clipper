@@ -4,7 +4,7 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 0 — Foundation** (status: **done**, commit `<TBD>`).
+> Last sprint: **Sprint 0 — Foundation** (status: **done**, commit `29d67ef`).
 > Current sprint: **Sprint 1 — Ingestion** (status: pending).
 > Next action (Sprint 1): ffprobe metadata extraction + validation, stdin input, per SPRINT_PLANNING.md
 > §Sprint 1. Sprint 0 landed: uv scaffold (0.12.13, lock pinned), config schema + profiles + merge order,
