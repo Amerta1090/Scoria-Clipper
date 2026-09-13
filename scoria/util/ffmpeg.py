@@ -78,6 +78,34 @@ def run_ffmpeg(
     return proc
 
 
+def run_ffmpeg_binary(
+    args: Sequence[str],
+    *,
+    binary: str = FFMPEG_BIN,
+    env: dict[str, str] | None = None,
+    timeout: float | None = None,
+) -> bytes:
+    """Run ffmpeg and return its raw stdout bytes (e.g. the f32le PCM pipe).
+
+    Same pinned surface as `run_ffmpeg` (`-nostdin`, explicit env, captured stderr
+    decoded for the failure hint), but stdout is kept as bytes for binary payloads.
+    """
+    path = _find(binary)
+    full_args = [path, "-nostdin", *args]
+    proc = subprocess.run(
+        full_args,
+        capture_output=True,
+        env=env if env is not None else os.environ.copy(),
+        timeout=timeout,
+    )
+    if proc.returncode != 0:
+        stderr = (proc.stderr or b"").decode("utf-8", errors="replace")
+        tail_lines = stderr.strip().splitlines()[-15:]
+        tail = "\n".join(tail_lines) if tail_lines else "(no stderr)"
+        raise PipelineError(f"{binary} failed with exit {proc.returncode}", hint=tail)
+    return proc.stdout
+
+
 def run_ffprobe(
     args: Sequence[str],
     *,

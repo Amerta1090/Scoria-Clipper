@@ -23,7 +23,7 @@ from scoria import envcheck
 from scoria.config import build_config, default_config, dump_yaml
 from scoria.errors import PipelineError, ScoriaError
 from scoria.ingest import MediaInfo, analyze_video
-from scoria.project import normalize, write_manifest
+from scoria.project import normalize, read_json, write_manifest
 from scoria.util import ffmpeg
 from scoria.util.logging import get_logger, setup_logging
 
@@ -69,7 +69,12 @@ def _not_implemented(stage: str) -> None:
 
 def encode_summary(media: MediaInfo, analysis_path: Path) -> dict:
     """`--json` stage summary under the serialization contract (rounded floats)."""
-    return {"media": normalize(media), "analysis": str(analysis_path)}
+    analysis = read_json(analysis_path)
+    return {
+        "media": normalize(media),
+        "audio": normalize(analysis.get("audio")),
+        "analysis": str(analysis_path),
+    }
 
 
 def _cli_overrides(

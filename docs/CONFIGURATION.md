@@ -52,6 +52,7 @@ audio:
   window_ms: 50
   analyze_start: 0.0         # only analyze [start, end] when set
   analyze_end: 0.0
+  peak_threshold: 0.999      # |sample| ≥ this fraction of full scale → counts as clipping
   silence:
     threshold_db: -35
     min_duration: 0.35       # silence shorter than this is not a boundary

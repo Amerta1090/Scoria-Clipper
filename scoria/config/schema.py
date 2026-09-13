@@ -131,6 +131,7 @@ class AudioConfig(StrictModel):
     window_ms: int = Field(default=50, ge=1)
     analyze_start: float = Field(default=0.0, ge=0.0)
     analyze_end: float = Field(default=0.0, ge=0.0)
+    peak_threshold: float = Field(default=0.999, ge=0.0, le=1.0)
     silence: SilenceConfig = Field(default_factory=SilenceConfig)
 
     @model_validator(mode="after")

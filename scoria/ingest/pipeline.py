@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from scoria.audio.pipeline import analyze_audio
 from scoria.config.schema import ScoriaConfig
 from scoria.ingest.core import build_media
 from scoria.ingest.io import resolve_input
@@ -29,7 +30,9 @@ def analyze_video(video_arg: str, config: ScoriaConfig) -> tuple[MediaInfo, Path
     if not stdin_mode:
         prepare_project_dir(project_dir, overwrite=config.project.overwrite)
     media = build_media(input_path, config, source=video_arg, source_kind=source_kind)
+    audio = analyze_audio(input_path, config, media)
     analysis_path = write_json(
-        project_dir / "analysis.json", {"schema": ANALYSIS_SCHEMA, "media": media}
+        project_dir / "analysis.json",
+        {"schema": ANALYSIS_SCHEMA, "media": media, "audio": audio},
     )
     return media, analysis_path.parent
