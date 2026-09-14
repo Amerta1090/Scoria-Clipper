@@ -33,7 +33,8 @@ Options:
 
 ### `clipper analyze <video>`
 Produces `analysis.json` (media + audio + visual + transcript features). Flags: same config/transcript/
-visual/overwrite flags. This is the only stage that touches the video/audio/frames; everything after it is
+visual/overwrite flags, including `--no-transcript` (skips STT → `transcript: null` + `degraded: ["transcript"]`)
+and `--json`. This is the only stage that touches the video/audio/frames; everything after it is
 pure data.
 
 ### `clipper segment <analysis.json>`
@@ -71,6 +72,11 @@ Alias for `report` limited to preview assets + timeline strip (no full HTML).
 ### `clipper verify-env`
 Runs a self-check: ffmpeg/ffprobe presence + version, whisper binary presence, libass (subtitles filter)
 availability, model file presence/checksum. Zero network. Useful in scripts and for onboarding.
+
+### `clipper fetch-model [--output <path>]`
+One-time network op: downloads the configured `transcript.model` from HuggingFace into `model/`,
+prints the file's sha256, and reminds you to set `transcript.model_sha256`. `--output` overrides the
+download target. Exits with a useful hint if the network is unavailable.
 
 ## 2. Examples
 

@@ -23,8 +23,11 @@ Test layering (bottom ↑) mirrors the architecture: pure functions → modules 
 - **`synthetic.mp4`** — generated at test-time by ffmpeg `lavfi` (`testsrc2` + `sine` tones) + optional
   `espeak-ng` spoken track (if installed) so it carries real words and silence gaps at known times.
   Generation script lives next to the fixtures; deterministic by construction.
-- **`transcript_small.json`** — handmade word-level transcript (id, start, end) with known sentences,
-  pauses, a question opener, a mid-sentence candidate trap. Drives L0 scoring + L1 caption tests without STT.
+- **`transcript_small.json`** — frozen whisper.cpp 1.9.4 `-ojf` shape (ADR-013/014: top-level
+  `transcription[]` with per-token `t_dtw` timestamps, no `words[]`) encoding known sentences,
+  pauses, a question opener, and a mid-sentence trap. Drives L0 parse/normalize/group goldens +
+  L1 transcript tests without STT. The real bridge (decode → whisper-cli → parse) is a separate
+  smoke test gated on `SCORIA_WHISPER_BIN` + `SCORIA_WHISPER_MODEL` (skipped otherwise).
 - **`analysis_small.json`** — complete hand-built analysis (audio RMS series, silence list, scene list)
   so `segment/score/rank` run end-to-end with zero media tools at all.
 - **Labeled candidates** (SCORING_ENGINE §8): `good.json`/`poor.json` per candidate as human labels;

@@ -37,9 +37,10 @@ detected and flagged rather than silently changing output.
 | | |
 |---|---|
 | Function | Local speech-to-text with word-level timestamps → transcript input for candidates/captions/scoring. |
-| Rationale | Single dependency-free native binary; no model conversion step; `--output-json` gives word `t0/t1`; greedy decode (`-bs 0`, `-t 0`) is near-deterministic for a fixed build; MIT-compatible. | 
+| Rationale | Single dependency-free native binary; no model conversion step; greedy decode (`-bs 0`, `-t 0`) is deterministic for a fixed build; MIT-compatible. **Format reality (ADR-013):** ≥ 1.9.x JSON has no `words[]`/`t0,t1` — timestamps are per-token `t_dtw` (centiseconds), emitted only with `-nfa --dtw <preset> -ojf` (flash-attn defaults ON and disables DTW). Word spans are reconstructed from BPE tokens by the bridge. |
+| Version tested | whisper.cpp **1.9.4-dev**, `ggml-small.bin` (`sha256 1be3a9b2…ea987b`, 488 MB). A `<model>-dtw` preset is required and matched to `tiny/base/small/medium` model sizes (no `large` preset). |
 | Resource | Dominant cost. `ggml-base` ≤ ~1× realtime; `ggml-small` ~1.5–3×; `ggml-medium` ≫ (avoid on CPU for MVP). RAM: ~1–3 GB depending on model. |
-| Install (Arch) | AUR `whisper.cpp` (installs `whisper-cli`); or build once locally `git clone … && make` (documented in README). Model `.bin` downloaded once from HuggingFace into `model/` (sha256 recorded). |
+| Install (Arch) | AUR `whisper.cpp` (installs `whisper-cli`); or build once locally — `cmake`/`make` per the project's own instructions. Model `.bin` fetched once via `clipper fetch-model` (HuggingFace, sha256 recorded) into `model/`. |
 | License | MIT (code); model weights inherit OpenAI Whisper license (Apache-2.0-compatible data usage, redistributable). |
 | Required? | **Yes for the full transcript path. Degradable**: if absent → audio-only scoring + silence/scene candidate generation still works (`--no-transcript`), fully functional for energy-driven clips. |
 | Alternative | faster-whisper (pip, CTranslate2 models; easier pip install, adds Python runtime dep — keep as post-MVP engine option behind the `transcript.engine` key). |

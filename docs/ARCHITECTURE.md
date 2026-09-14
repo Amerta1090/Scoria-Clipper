@@ -111,13 +111,29 @@ planning reference.
   internals at 4 fps sampling.
 
 ### 5.3 Transcript
-- Bridge to `whisper-cli` (whisper.cpp) with deterministic settings: fixed model file (sha256-pinned),
-  greedy decoding (beam 0 / temperature 0), fixed thread count. Produces JSON with word-level `t0,t1`.
-- **Sentence grouping (our rule, not whisper's):** merge words into sentences using (a) whisper segment
-  ends, (b) inferred punctuation (period/question/exclamation from config + end-of-segment heuristics),
-  (c) pause gaps ≥ config threshold. Output: ordered `Sentence {words[], start, end, text}`.
-- Degradation: if STT is disabled/unavailable → `transcript: null`, scoring renormalizes weights
-  (speech-dependent terms removed), candidate generation relies on silence + scene boundaries only.
+- Bridge to `whisper-cli` (whisper.cpp, v1.9.x) with deterministic settings: fixed model file
+  (sha256-pinned at startup), greedy decoding (`-bs 0`), fixed thread count, **flash-attn off**
+  (`-nfa`) + `--dtw <preset>` so per-token timestamps exist. Pinned arg surface lives in
+  `transcript/whisper.py`.
+- **Format reality (ADR-013):** whisper.cpp ≥ 1.9 no longer emits a `words` array or `t0/t1`.
+  `-ojf` output = `result.language` + a top-level `transcription[]` whose entries carry per-token
+  `tokens[]{text, id, p, t_dtw}`. `t_dtw` is the token **start** tick in centiseconds (10 ms);
+  special tokens carry `t_dtw = -1` and are filtered. Segment-level `timestamps`/`offsets` in this
+  build are unreliable and are ignored. Words are reconstructed from contiguous BPE tokens
+  (a token starting with a space begins a new word); `word.start` = first token tick, `word.end` =
+  last token tick (the output carries no token end, so `end` is an approximation the sentence
+  grouping absorbs). Timestamps are normalized (monotonic snap) so no word overlaps another.
+- **Sentence grouping (our rule, not whisper's):** merge normalized words into sentences, splitting
+  only on (a) inter-word pause ≥ `max_gap_seconds`, or (b) a whisper segment end with pause ≥
+  0.30 s (short segment-boundary breaths stay mid-sentence — the "mid-sentence trap"). Sentences
+  shorter than `min_sentence_words` absorb into the previous one. With `force_punctuation`, text is
+  terminated with `?`/`.` inferred from the first word (en + id question starters); first letter
+  capitalized. Output: ordered `Sentence {words[], start, end, text}`.
+- Degradation: transcript disabled (config or `--no-transcript`) → `transcript: null`,
+  `manifest.degraded: ["transcript"]`, scoring renormalizes weights (speech-dependent terms
+  removed), candidate generation relies on silence + scene boundaries only. An **enabled** STT that
+  fails (model missing/checksum mismatch, binary absent, whisper errors) **fails the run** (exit 1)
+  — degraded paths are only ever entered through the explicit flag.
 
 ### 5.4 Boundaries & candidates (segment/)
 - Boundary sources, unioned and deduped within 50 ms:

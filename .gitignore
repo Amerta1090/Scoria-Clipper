@@ -17,6 +17,9 @@ clips/
 previews/
 temp_work/
 
+# User media samples (never committed)
+sample raw/
+
 # Whisper models (binary; checksum + model id recorded in manifest.json instead)
 model/*.bin
 models/*.bin

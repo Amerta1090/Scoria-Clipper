@@ -24,6 +24,7 @@ from scoria.config import build_config, default_config, dump_yaml
 from scoria.errors import PipelineError, ScoriaError
 from scoria.ingest import MediaInfo, analyze_video
 from scoria.project import normalize, read_json, write_manifest
+from scoria.transcript import whisper_cli_info, whisper_model_info
 from scoria.util import ffmpeg
 from scoria.util.logging import get_logger, setup_logging
 
@@ -73,6 +74,7 @@ def encode_summary(media: MediaInfo, analysis_path: Path) -> dict:
     return {
         "media": normalize(media),
         "audio": normalize(analysis.get("audio")),
+        "transcript": normalize(analysis.get("transcript")),
         "analysis": str(analysis_path),
     }
 
@@ -170,6 +172,7 @@ def analyze(
     ),
     config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
     profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
+    no_transcript: bool = typer.Option(False, "--no-transcript", help="Skip STT"),
     overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing project dir"),
     log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
     json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
@@ -180,15 +183,20 @@ def analyze(
         overrides["project"] = {"dir": str(output)}
     if overwrite:
         overrides.setdefault("project", {})["overwrite"] = True
+    if no_transcript:
+        overrides["transcript"] = {"enabled": False}
     cfg = build_config(path=config_path, profile=profile, overrides=overrides)
-    media, project_dir = analyze_video(str(video), cfg)
+    media, project_dir, degraded = analyze_video(str(video), cfg)
     tools = {name: ffmpeg.version(name) for name in ("ffmpeg", "ffprobe")}
+    if cfg.transcript.enabled:
+        tools["whisper-cli"] = whisper_cli_info(cfg.transcript)
+        tools["whisper-model"] = whisper_model_info(cfg.transcript)
     write_manifest(
         project_dir,
         config=cfg,
         tools=tools,
         invocation=sys.argv,
-        degraded=[],
+        degraded=degraded,
     )
     analysis_path = project_dir / "analysis.json"
     logger.info(
@@ -255,10 +263,49 @@ def preview(path: Path) -> None:
     _not_implemented("preview")
 
 
-@app.command(help="One-time model download (Sprint 3).")
+@app.command(help="Download + verify the Whisper model (one-time network op).")
 @_cmd
-def fetch_model() -> None:
-    _not_implemented("fetch-model")
+def fetch_model(
+    config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
+    profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
+    output: Path | None = typer.Option(
+        None, "--output", help="Model file path (default transcript.model)"
+    ),
+):
+    from scoria.util.hash import sha256_file
+
+    cfg = build_config(path=config_path, profile=profile)
+    model = whisper_model_info(cfg.transcript)["path"]
+    if output is not None:
+        model = str(Path(output).expanduser())
+    url = f"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{Path(model).name}"
+    err_console.print(f"[cyan]fetching[/cyan] {url}")
+    _download_model(url, Path(model))
+    sha = sha256_file(Path(model))
+    typer.echo(f"downloaded {Path(model)} ({Path(model).stat().st_size} bytes)")
+    typer.echo(f"sha256: {sha}")
+    typer.echo("set transcript.model_sha256 to that hash to verify every run at startup.")
+
+
+def _download_model(url: str, target: Path) -> None:
+    import urllib.error
+    import urllib.request
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".part")
+    try:
+        with urllib.request.urlopen(url, timeout=120) as response, tmp.open("wb") as out:
+            while True:
+                chunk = response.read(1 << 20)
+                if not chunk:
+                    break
+                out.write(chunk)
+        tmp.replace(target)
+    except urllib.error.URLError as exc:
+        tmp.unlink(missing_ok=True)
+        raise PipelineError(
+            f"model download failed: {exc}", hint="check the network and the model name"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------

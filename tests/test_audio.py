@@ -247,9 +247,16 @@ def test_staged_equals_whole_file_slice(planted):
 
 def test_analyze_video_audio_section(tmp_path, planted):
     project = tmp_path / "proj"
-    cfg = build_config(overrides={"project": {"dir": str(project)}, "media": {"min_duration": 1.0}})
-    media, project_dir = analyze_video(str(planted), cfg)
+    cfg = build_config(
+        overrides={
+            "project": {"dir": str(project)},
+            "media": {"min_duration": 1.0},
+            "transcript": {"enabled": False},
+        }
+    )
+    media, project_dir, degraded = analyze_video(str(planted), cfg)
     assert project_dir == project
+    assert degraded == ["transcript"]
     analysis = json.loads((project / "analysis.json").read_text(encoding="utf-8"))
     assert analysis["schema"] == "analysis"
     assert analysis["media"]["width"] == media.width
@@ -268,6 +275,7 @@ def test_analyze_video_audio_deterministic(tmp_path, planted):
         overrides={
             "project": {"dir": str(project), "overwrite": True},
             "media": {"min_duration": 1.0},
+            "transcript": {"enabled": False},
         }
     )
     analyze_video(str(planted), cfg)

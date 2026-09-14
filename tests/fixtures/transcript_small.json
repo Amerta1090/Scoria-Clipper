@@ -1,0 +1,84 @@
+{
+  "systeminfo": "whisper.cpp version: 1.9.4-dev, model 'small', dtw 'small-greedy'",
+  "model": {
+    "type": "small",
+    "multilinguality": "multilingual"
+  },
+  "params": {
+    "dtw": true,
+    "flash_attn": false,
+    "beam_size": 0,
+    "language": "id",
+    "max_context": -1,
+    "n_threads": 4
+  },
+  "result": {
+    "language": "id"
+  },
+  "transcription": [
+      {
+        "text": "apakah kalian tahu",
+        "timestamps": {"from": 0, "to": 76},
+        "offsets": {"from": 0, "to": 76},
+        "tokens": [
+          {"text": " apakah", "id": 0, "p": 0.98, "t_dtw": 0},
+          {"text": " kalian", "id": 1, "p": 0.98, "t_dtw": 24},
+          {"text": " tahu", "id": 2, "p": 0.98, "t_dtw": 76}
+        ]
+      },
+      {
+        "text": "cara membuat konten",
+        "timestamps": {"from": 75, "to": 190},
+        "offsets": {"from": 75, "to": 190},
+        "tokens": [
+          {"text": " cara", "id": 3, "p": 0.98, "t_dtw": 75},
+          {"text": " mem", "id": 4, "p": 0.98, "t_dtw": 122},
+          {"text": "buat", "id": 5, "p": 0.98, "t_dtw": 150},
+          {"text": " konten", "id": 6, "p": 0.98, "t_dtw": 190}
+        ]
+      },
+      {
+        "text": "viral di tiktok, tanpa effort",
+        "timestamps": {"from": 230, "to": 365},
+        "offsets": {"from": 230, "to": 365},
+        "tokens": [
+          {"text": " viral", "id": 7, "p": 0.98, "t_dtw": 230},
+          {"text": " di", "id": 8, "p": 0.98, "t_dtw": 243},
+          {"text": " tik", "id": 9, "p": 0.98, "t_dtw": 283},
+          {"text": "tok,", "id": 10, "p": 0.98, "t_dtw": 304},
+          {"text": " tanpa", "id": 11, "p": 0.98, "t_dtw": 326},
+          {"text": " effort", "id": 12, "p": 0.98, "t_dtw": 365}
+        ]
+      },
+      {
+        "text": "rahasia cuma satu",
+        "timestamps": {"from": 500, "to": 575},
+        "offsets": {"from": 500, "to": 575},
+        "tokens": [
+          {"text": " raha", "id": 13, "p": 0.98, "t_dtw": 500},
+          {"text": "sia", "id": 14, "p": 0.98, "t_dtw": 538},
+          {"text": " cuma", "id": 15, "p": 0.98, "t_dtw": 550},
+          {"text": " satu", "id": 16, "p": 0.98, "t_dtw": 575}
+        ]
+      },
+      {
+        "text": "sip",
+        "timestamps": {"from": 800, "to": 800},
+        "offsets": {"from": 800, "to": 800},
+        "tokens": [
+          {"text": " sip", "id": 17, "p": 0.95, "t_dtw": 800}
+        ]
+      },
+      {
+        "text": "dan itu saja",
+        "timestamps": {"from": 950, "to": 1040},
+        "offsets": {"from": 950, "to": 1040},
+        "tokens": [
+          {"text": " dan", "id": 18, "p": 0.98, "t_dtw": 950},
+          {"text": " itu", "id": 19, "p": 0.98, "t_dtw": 964},
+          {"text": " saja", "id": 20, "p": 0.98, "t_dtw": 1040},
+          {"text": " [_EOT_]", "id": 503, "p": 0.99, "t_dtw": -1}
+        ]
+      }
+    ]
+}

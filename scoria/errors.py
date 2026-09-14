@@ -38,6 +38,12 @@ class MissingDependencyError(PipelineError):
         super().__init__(message, hint=hint or "run `clipper verify-env` to check your environment")
 
 
+class TranscriptError(PipelineError):
+    """The STT pipeline failed at runtime (model checksum, tool failure, parse). Exit 1."""
+
+    exit_code = 1
+
+
 class ConfigError(ScoriaError):
     """Invalid configuration (unknown key, validation failure, bad YAML). Exit 2."""
 

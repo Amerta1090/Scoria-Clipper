@@ -155,19 +155,33 @@ def test_analysis_window_start_beyond_duration_is_error(landscape):
 
 def test_analyze_video_writes_analysis_json(tmp_path, landscape):
     project = tmp_path / "proj"
-    cfg = build_config(overrides={"project": {"dir": str(project)}, "media": {"min_duration": 1.0}})
-    media, project_dir = analyze_video(str(landscape), cfg)
+    cfg = build_config(
+        overrides={
+            "project": {"dir": str(project)},
+            "media": {"min_duration": 1.0},
+            "transcript": {"enabled": False},
+        }
+    )
+    media, project_dir, degraded = analyze_video(str(landscape), cfg)
     assert project_dir == project
+    assert degraded == ["transcript"]
     analysis = json.loads((project / "analysis.json").read_text(encoding="utf-8"))
     assert analysis["schema"] == "analysis"
     assert analysis["media"]["width"] == media.width == 640
     assert analysis["media"]["source"] == str(landscape)
+    assert analysis["transcript"] is None
     assert check_contract(analysis) == []
 
 
 def test_analyze_video_refuses_existing_dir(tmp_path, landscape):
     project = tmp_path / "proj"
-    cfg = build_config(overrides={"project": {"dir": str(project)}, "media": {"min_duration": 1.0}})
+    cfg = build_config(
+        overrides={
+            "project": {"dir": str(project)},
+            "media": {"min_duration": 1.0},
+            "transcript": {"enabled": False},
+        }
+    )
     analyze_video(str(landscape), cfg)
     with pytest.raises(PipelineError, match="already exists"):
         analyze_video(str(landscape), cfg)
@@ -179,6 +193,7 @@ def test_analyze_deterministic_two_runs(tmp_path, landscape):
         overrides={
             "project": {"dir": str(project), "overwrite": True},
             "media": {"min_duration": 1.0},
+            "transcript": {"enabled": False},
         }
     )
     analyze_video(str(landscape), cfg)
@@ -214,6 +229,7 @@ def test_analyze_stdin_via_cli(tmp_path, landscape, min_cfg):
         str(project),
         "-c",
         str(min_cfg),
+        "--no-transcript",
         "--overwrite",
     ]
     proc = subprocess.run(
@@ -257,34 +273,47 @@ def test_cli_analyze_exit_zero_writes_manifest(tmp_path, landscape, min_cfg):
     project = tmp_path / "proj"
     result = runner.invoke(
         app,
-        ["analyze", str(landscape), "-o", str(project), "-c", str(min_cfg)],
+        ["analyze", str(landscape), "-o", str(project), "-c", str(min_cfg), "--no-transcript"],
     )
     assert result.exit_code == 0, result.output
     manifest = json.loads((project / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["schema"] == "project-manifest"
     assert manifest["tools"]["ffmpeg"]["version"]
+    assert manifest["degraded"] == ["transcript"]
     analysis = json.loads((project / "analysis.json").read_text(encoding="utf-8"))
     assert analysis["media"]["duration"] > 0
+    assert analysis["transcript"] is None
 
 
 def test_cli_analyze_json_summary(tmp_path, landscape, min_cfg):
     project = tmp_path / "proj"
     result = runner.invoke(
         app,
-        ["analyze", str(landscape), "-o", str(project), "-c", str(min_cfg), "--json"],
+        [
+            "analyze",
+            str(landscape),
+            "-o",
+            str(project),
+            "-c",
+            str(min_cfg),
+            "--no-transcript",
+            "--json",
+        ],
     )
     assert result.exit_code == 0, result.output
     summary = json.loads(result.output.strip().splitlines()[-1])
     assert summary["media"]["width"] == 640
     assert summary["media"]["aspect_ratio"] == round(16 / 9, 4)
     assert summary["analysis"].endswith("analysis.json")
+    assert summary["transcript"] is None
 
 
 def test_cli_analyze_overwrite_guard(tmp_path, landscape, min_cfg):
     project = tmp_path / "proj"
-    first = runner.invoke(app, ["analyze", str(landscape), "-o", str(project), "-c", str(min_cfg)])
+    args = ["analyze", str(landscape), "-o", str(project), "-c", str(min_cfg), "--no-transcript"]
+    first = runner.invoke(app, args)
     assert first.exit_code == 0
-    second = runner.invoke(app, ["analyze", str(landscape), "-o", str(project), "-c", str(min_cfg)])
+    second = runner.invoke(app, args)
     assert second.exit_code == 1
     assert "project dir" in second.output.lower()
     assert "overwrite" in second.output.lower()
@@ -292,7 +321,16 @@ def test_cli_analyze_overwrite_guard(tmp_path, landscape, min_cfg):
 
 def test_cli_analyze_deterministic(tmp_path, landscape, min_cfg):
     project = tmp_path / "proj"
-    args = ["analyze", str(landscape), "-o", str(project), "-c", str(min_cfg), "--overwrite"]
+    args = [
+        "analyze",
+        str(landscape),
+        "-o",
+        str(project),
+        "-c",
+        str(min_cfg),
+        "--no-transcript",
+        "--overwrite",
+    ]
     first = runner.invoke(app, args)
     assert first.exit_code == 0, first.output
     first_analysis = (project / "analysis.json").read_bytes()

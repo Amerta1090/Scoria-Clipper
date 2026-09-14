@@ -77,10 +77,21 @@ decisions are superseded, never edited retroactively.
 - **Consequences:** Fresh clones get a working test env from plain `uv sync`; the runtime surface is still exactly the five declared packages; `--locked` CI is deterministic.
 - Status: **Accepted**.
 
+## ADR-013 — Whisper.cpp ≥ 1.9 JSON format drift: word timestamps come from `t_dtw` tokens
+- **Context:** The docs (and ADR-004) assumed whisper's `-oj` produced `result.segments[].words[]{t0,t1}`. A built whisper.cpp 1.9.4-dev emits `result.language` + a **top-level `transcription[]`** with per-token `tokens[]{text, id, p, t_dtw}`; there is **no `words` array, no `t0/t1`** anywhere in the JSON. Timestamps exist only when flash-attn is disabled (`-nfa`; it defaults ON and silently kills DTW) **and** `--dtw <preset>` is passed — the preset is a model-size token (`tiny.base.small.medium` variants; `large` has no preset). Segment-level `timestamps`/`offsets` are garbage in this build; `t_dtw` is the token start tick in **centiseconds**; special tokens (`[_EOT_]`) carry `t_dtw = -1`.
+- **Decision:** The bridge pins an exact arg surface (`-bs 0 -nt -np -sow -nfa -dtw <preset> -ojf`), reconstructs words from contiguous BPE tokens (a leading space starts a word), reads `word.start` = first token tick and `word.end` = last token tick (the format has no token end — `end` is an approximation the monotonic snap + sentence grouping absorb), and ignores segment offsets entirely.
+- **Consequences:** No dependency on whisper-internal word segmentation; word `end` slightly overstates each word's true end (gap math uses the next word's `start`, so pauses stay conservative). Unknown/absent `--dtw` preset → `TranscriptError` (exit 1). A future whisper build restoring `words[]` would be read through the same tokens path — unchanged contract.
+- Status: **Accepted (Sprint 3, validated live against `ggml-small.bin` + 1.9.4-dev)**.
+
+## ADR-014 — Spoken-fixture strategy: static JSON golden is primary, `espeak-ng` real-bridge smoke is env-gated (resolves OQ3)
+- **Context:** OQ3 asked whether transcript fixtures are static JSON or need audio generation. STT output is deterministic-only *for a fixed binary+model*, so generated-audio goldens would still need whisper installed (+model) in CI — a heavy, network-gated dependency.
+- **Decision:** The transcript golden is a **frozen static JSON file** (`tests/fixtures/transcript_small.json`, whisper 1.9.4 `-ojf` shape) that tests parse → normalize → group without any STT tool. A **real-bridge smoke test** (decode → whisper-cli → parse, asserting non-empty `words` and correct sidecar naming) is gated behind explicit env (`SCORIA_WHISPER_BIN` + `SCORIA_WHISPER_MODEL`) and skipped otherwise. `espeak-ng` remains an **optional** test-only dependency for fixtures that need real speech (as TESTING.md §2 allows).
+- **Consequences:** CI stays offline and whisper-free (all goldens pass without STT); the real bridge is still exercised on dev machines via the env-gated smoke. No audio fixture generation is required in tests.
+- Status: **Accepted (Sprint 3).**
 ---
 
 ## Open questions
 1. Default output vertical (9:16) even for portrait 4:3 sources — decided yes (blur-pad), but keep `--no-vertical` escape.
 2. Whether S4's folded-in "minimal scene detection" should formally become a `visual/` module in S2 rather than S4 — see SPRINT_PLANNING §Sequencing notes; will be revisited during Sprint 4 spikes.
-3. `espeak-ng` for spoken fixture media — optional test-only dependency; decide in Sprint 3 whether fixtures are static JSON or need audio generation.
+3. ~~`espeak-ng` for spoken fixture media — optional test-only dependency; decide in Sprint 3 whether fixtures are static JSON or need audio generation.~~ **Resolved in Sprint 3: static JSON golden primary, env-gated real-bridge smoke + optional espeak-ng (ADR-014).**
 4. CONFIGURATION.md §3's caption-readability rule (`captions.max_duration ≥ (chars_per_line·max_lines)/(wpm/60)`) was **not** implemented in the Sprint 0 config schema: the shipped defaults (`max_duration: 4.5`) contradict it, and it is really Sprint 7 (captions) logic. Decide at Sprint 7 whether to adopt it (then adjust defaults) or drop the rule; needs an ADR either way.

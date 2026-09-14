@@ -1,18 +1,20 @@
 """`clipper verify-env`: zero-network environment self-check.
 
-Required (exit 1 if missing): ffmpeg + ffprobe. Optional (warn only): whisper-cli,
-libass (subtitles filter), numpy, Python version. Never phones home.
+Required (exit 1 if missing): ffmpeg + ffprobe. Optional (warn only): whisper-cli +
+its model, libass (subtitles filter), numpy, Python version. Never phones home.
 """
 
 from __future__ import annotations
 
 import sys
-from shutil import which
 from typing import Any
 
 import numpy as np
 
 from scoria import __version__
+from scoria.config import build_config, default_config
+from scoria.errors import ConfigError
+from scoria.transcript import whisper_cli_info, whisper_model_info
 from scoria.util import ffmpeg
 
 REQUIRED_TOOLS = ("ffmpeg", "ffprobe")
@@ -37,10 +39,21 @@ def check() -> dict[str, Any]:
         "version": np.__version__,
         "binary": None,
     }
+    try:
+        cfg = build_config()
+    except ConfigError:
+        cfg = default_config()
+    whisper = whisper_cli_info(cfg.transcript)
     tools["whisper_cli"] = {
-        "present": which("whisper-cli") is not None,
+        "present": whisper is not None,
+        "version": whisper["version"] if whisper else None,
+        "binary": whisper["binary"] if whisper else None,
+    }
+    model = whisper_model_info(cfg.transcript)
+    tools["whisper_model"] = {
+        "present": bool(model["sha256"]),
         "version": None,
-        "binary": which("whisper-cli"),
+        "binary": model["path"],
     }
     tools["libass"] = {"present": ffmpeg.has_filter("subtitles"), "version": None, "binary": None}
     return {
