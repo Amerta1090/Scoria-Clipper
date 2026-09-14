@@ -92,6 +92,8 @@ get a DECISIONS.md ADR.)_
   (DECISIONS.md Open Question 3). **Resolved Sprint 3: static JSON primary (ADR-014).**
 - Confirm whether Sprint 4's minimal scene detection lives in `segment/` or as a `visual/` module
   (DECISIONS.md Open Question 2).
+- Real-video sanity runs (STT latency, real boundary/cut quality, PRD §8 cold-start) use untracked captures
+  in `sample raw/` (git-ignored; e.g. a live-streaming gamer video) — manual, never CI (TESTING.md §2.1).
 
 ## Agent reminder
 

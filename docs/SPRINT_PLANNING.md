@@ -60,7 +60,7 @@ no network at runtime, every sprint's artifacts round-trip through the serializa
 - **Deliverables:** `segment/` module: boundary union (silence ∪ sentence ∪ scene), dedupe/sort, feature slice per candidate, aligned_to flags; `candidates.json` raw.
 - **Dependencies:** S2, S3 (silences, sentences), plus a minimal `visual/` scene list (moved here — see note below).
 - **Tasks (re-ordered):** port minimal scene detection from the visual milestone into segment inputs (scdet-thresholded scene list); boundary builder; window generator (§ARCHITECTURE 5.4); candidate feature slicing; serialization.
-- **Tests:** L0 golden: known boundaries → exact candidate list; durations within [min,max]; complete-cut flags correct; hard-cut case; O(boundaries) bound.
+- **Tests:** L0 golden: known boundaries → exact candidate list; durations within [min,max]; complete-cut flags correct; hard-cut case; O(boundaries) bound. Real-video sanity (manual, optional): run against a capture from `sample raw/` (untracked) to eyeball whether real sentences/silences/scenes trigger sensible candidates.
 - **Acceptance criteria:** candidate list equals fixture golden; every candidate carries aligned_to + durations; ≥1 candidate per video of the fixture.
 - **Definition of done:** segmentation pure-tested without media tools (synthetic silences/sentences/scenes in JSON).
 - **Risks:** boundary density explosion → cap + deterministic selection; sentence-only boundaries on `--no-transcript` → silence+scene path tested.

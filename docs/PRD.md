@@ -146,6 +146,11 @@ The video → clips loop, with these components:
 7. A unit-testable, injectable architecture where every scoring function takes a plain feature vector
    and returns a plain breakdown.
 
+**Real-footage validation (manual, non-CI):** success criteria 1 and 4 are also spot-checked against real
+captures kept in `sample raw/` (untracked, git-ignored — e.g. a gamer live-streaming recording), via manual
+`clipper run --top 3` runs plus clean-cut / burn-in inspection. CI stays synthetic-only so the pipeline never
+couples to any one creator's media.
+
 ## 9. Risks (top)
 
 | Risk | Likelihood | Impact | Mitigation |

@@ -36,6 +36,16 @@ Test layering (bottom ↑) mirrors the architecture: pure functions → modules 
 Every runtime JSON artifact in fixtures is checked against the **serialization contract** (sorted keys,
 4-decimal floats) so golden diffs are byte-stable.
 
+### 2.1 Real-video testing (manual, optional)
+
+`sample raw/` holds **untracked, user-provided captures** (e.g. a gamer live-streaming recording) for manual
+end-to-end runs — not part of CI. `.gitignore`d by design, so anything dropped there stays local.
+
+Use it for what synthetic fixtures can't verify: real whisper decode + STT latency on a genuine talking-head
+track, real sentence/scene boundaries feeding candidate cuts, burn-in quality, and the PRD §8 cold-start
+(`clipper run --top 3`). Commands run against the capture in place — `clipper analyze "sample raw/<video>.mp4"
+-c cfg -o <tmp project>` — with output treated as evidence, never as a committed golden.
+
 ## 3. What each core component must prove
 
 - **score/** — property: given identical feature dicts → identical breakdown floats. Bounds: every
