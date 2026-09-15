@@ -30,6 +30,11 @@ Each `ScoreBreakdown` records, for every term:
 
 This is what `clipper explain clip-03` prints. A rejected candidate's breakdown is equally visible.
 
+In the serialized document the `weight` field is the **renormalized** weight (`config_weight / renorm_factor`,
+see §5) — so `weighted = weight · normalized` sums with `subscore_sum` directly. Terms whose formula has no
+pre-clamp return `raw == normalized`. Every term and penalty also carries its `inputs`, which is what makes a
+late re-score a pure function of `candidates.json` + config.
+
 ## 2. Sub-scores (v1)
 
 ### 2.1 audio_energy — w 0.09
@@ -49,6 +54,8 @@ This is what `clipper explain clip-03` prints. A rejected candidate's breakdown 
 - Inputs: words-per-minute (`wpm`) in candidate, video-wide speaker baseline (`wpm_base` = video-wide WPM).
 - `r = wpm / wpm_base`.
 - `s = bell(r, 0.85, 1.35)` (trapezoid: linear up 0→1 between 0.85–1.0, 1 at 1.0–1.2, linear down to 0 at 1.5).
+  The trapezoid knots are the spec; `pacing_band.hi` (1.35) and `wpm_base_window` are reserved config keys,
+  present in the schema but unused in v1.
   Rationale: relative to the speaker's own baseline (self-calibrating), +/-25 % is the "comfortable" band.
 - Keep it weak — pacing is temperament, not content.
 
@@ -131,7 +138,14 @@ sink a great clip to zero.
 ## 5. Renormalization
 
 When a signal is disabled (e.g., `transcript: off`, or `face_presence: off`), its weight is removed and all
-enabled weights are scaled by `1/Σ(enabled)`. Always documented in the breakdown (`renorm_factor`).
+enabled weights are scaled by `1/Σ(enabled)`. Always documented in the breakdown (`renorm_factor` and
+`scoring_meta.signals_disabled`).
+
+No transcript removes every transcript-dependent term: `speech_density`, `pacing`, `hook`, `completeness` (its
+sentence-boundary grades have nothing to grade), `keyword_density`, `sentence_quality`. No visual signal
+additionally removes `visual_activity`. `face_presence` has no feature producer in MVP, so it is *always* in
+the disabled set. The disabled set is stored in the enriched document so a re-score renormalizes the same
+weight set without the analysis artifacts.
 
 Sub-scoring is invariant: a range check runs at config load so the sum of enabled weights ∈ [0.99, 1.01].
 

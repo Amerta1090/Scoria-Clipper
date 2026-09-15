@@ -4,24 +4,20 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 4 — Segmentation + candidates** (status: **done**, this commit).
-> Current sprint: **Sprint 5 — Scoring engine** (status: pending).
-> Next action (Sprint 5): `score/` module — SCORING_ENGINE.md exact implementation: per-candidate
-> feature slices (already embedded in candidates.json), sub-scores in [0,1] with config weights
-> normalized to 1 across enabled terms, penalties (edge_silence → flub), ScoreBreakdown with
-> function ids, SCORING_VERSION stamping; `visual_activity` term stays a config-weight no-op until
-> the motion pass lands (ADR-015).
-> Sprint 4 landed: `visual/` module — ffmpeg `scdet` INFO-line scene changes (`resolves DECISIONS.md
-> OQ2`, ADR-015; `scene_detection_threshold` [0,1] → scdet %×100, single gray 4fps 64×36 pass with
-> `trim` preserving absolute timestamps, degradable `--no-visual`); `segment/` module — boundary
-> builder (union of sentence/silence/scene, 50 ms dedupe, canonical source order) + window generator
-> (A = nearest preferred-band boundary, B = last-before-max with `hard_cut_margin`, hard-cut fallback,
-> ≤ max_candidates_per_start, duplicate-window drop, ADR-016) → raw `candidates.json` (schema
-> `candidates`, slices half-open/inclusive per source, compact audio window range); wired into
-> `analyze_video` (`analysis.json.visual` + degraded) + `clipper segment` CLI; fixture
-> `analysis_small.json` (14-candidate golden) + `test_segment.py`/`test_visual.py`; `segment_from_whisper`
-> now actually gates whisper segment hints (S3 drift reconciled); 137 tests + 1 skip green, ruff clean,
-> end-to-end analyze+segment smoke OK.
+> Last sprint: **Sprint 5 — Scoring engine** (status: **done**, this commit).
+> Current sprint: **Sprint 6 — Ranking + diversity** (status: pending).
+> Next action (Sprint 6): greedy marginal-gain ranking (SCORING_ENGINE.md §7) + diversity constraints — `rank/`
+> module, `clipper rank` CLI, `RankingConfig` lens, `ranking.json` contract, CC0 fixture labels (TESTING.md §6).
+> Sprint 5 landed: `score/` module — `score_candidates()` first-pass (analysis.json) / re-score (embedded
+> inputs) with config-only determinism (CLI_SPEC: score = f(candidates.json, config)); terms
+> `audio_energy/speech_density/pacing/hook/completeness/visual_activity(no-op ADR-015)/keyword_density/sentence_quality`
+> + penalties `edge_silence/dead_air/mid_sentence_start/mid_word_end/low_energy_tail/flub_repeats/peak_clipping`,
+> all capped & total-capped; `ScoreBreakdown` stamps `scoring_version` + `signals_disabled` + `renorm_factor`,
+> every term/penalty embeds its inputs; `completeness` added to `TRANSCRIPT_DISABLED_TERMS`; `clipper score`
+> CLI (dir or candidates.json, `--json`, exit 1 missing sibling analysis on first pass / exit 2 bad config);
+> fixture golden totals pinned to 4 decimals (c0001 64.0449 … c0012 42.8110 mid_sentence, 75.2809 family,
+> 32.8090 mid_word family); 192 tests + 1 skip green (was 137+1), ruff clean; re-score byte-identical; bug:
+> edge-silence exact-tol float fill missed trailing silence (40.0−39.6 < 0.4) — `_EDGE_EPS` guard.
 
 ## Milestone
 
@@ -36,7 +32,7 @@ it at session end (same commit as the work or a `chore(status):` commit).
 | 2 | Audio analysis | **done** | PCM pass, energy/RMS/silence/loudness/peaks (analysis.json.audio) |
 | 3 | Transcript pipeline | **done** | whisper bridge + grouping, deferred OQ3 (ADRs 013, 014) |
 | 4 | Segmentation + candidates | **done** | visual/ scdet scenes + segment/ boundaries+windows (ADRs 015, 016) |
-| 5 | Scoring engine | pending | SCORING_ENGINE.md exact implementation |
+| 5 | Scoring engine | **done** | score/ module + `clipper score`, golden totals pinned, this commit |
 | 6 | Ranking + diversity | pending | greedy marginal-gain with overlap/sim/gap |
 | 7 | Captions | pending | SRT/ASS + karaoke + line builder |
 | 8 | Vertical reframing | pending | center crop + blur-pad geometry |
@@ -90,6 +86,11 @@ get a DECISIONS.md ADR.)_
 - Sprint 4: scdet emits **percentage-scale** scores and the config's `[0,1]` threshold is scaled ×100 —
   a "0.35" config is scdet `threshold=35`. A testsrc2→smptebars test cut scored only ~31 (below the
   0.35 config) so the visual fixture uses black→white (score 99.609 at t=2.0).
+- Sprint 5: `SCORING_ENGINE.md §2.3`'s `pacing_band.hi` (1.35) and `wpm_base_window` (30) are reserved
+  config keys — the trapezoid knots (1.0/1.2/1.5) are spec numerals, not config. Documented at §2.3.
+- Sprint 5: the enriched document's floats are serialized under the 4-decimal contract (ADR-010) — the
+  pinned golden totals (e.g. c0001 64.0449) are the **normalized** doc values, so a byte-identical re-score
+  is guaranteed by construction (inputs are contract-normalized at feature-build time).
 
 ## Known risks / watch items
 

@@ -24,7 +24,9 @@ from scoria.config import build_config, default_config, dump_yaml
 from scoria.errors import PipelineError, ScoriaError
 from scoria.ingest import MediaInfo, analyze_video
 from scoria.project import normalize, read_json, write_json, write_manifest
-from scoria.segment import build_candidates
+from scoria.score import score_candidates
+from scoria.score.models import SCORED_CANDIDATES_VERSION
+from scoria.segment import CANDIDATES_VERSION, build_candidates
 from scoria.transcript import whisper_cli_info, whisper_model_info
 from scoria.util import ffmpeg
 from scoria.util.logging import get_logger, setup_logging
@@ -273,10 +275,70 @@ def segment(
         )
 
 
-@app.command(help="Score candidates.json (Sprint 5).")
+@app.command(help="Enrich candidates.json with per-candidate ScoreBreakdowns (Sprint 5).")
 @_cmd
-def score(path: Path) -> None:
-    _not_implemented("score")
+def score(
+    path: Path = typer.Argument(..., help="candidates.json or a scoria project dir"),
+    config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
+    profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
+    log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
+):
+    setup_logging(log_level)
+    cfg = build_config(path=config_path, profile=profile)
+    candidates_path = _candidates_json_path(path)
+    candidates = read_json(candidates_path)
+    if not isinstance(candidates, dict) or candidates.get("schema") != "candidates":
+        raise PipelineError(
+            f"not a candidates document (schema != 'candidates'): {candidates_path}",
+            hint="run `clipper segment <analysis.json>` first",
+        )
+
+    has_breakdowns = any("score" in c for c in candidates.get("candidates", []))
+    analysis = None
+    if candidates.get("version") == CANDIDATES_VERSION and not has_breakdowns:
+        analysis_path = candidates_path.parent / "analysis.json"
+        if not analysis_path.is_file():
+            raise PipelineError(
+                "a raw candidates document needs the sibling analysis.json on the first pass",
+                hint=f"expected {analysis_path} next to {candidates_path}",
+            )
+        analysis = read_json(analysis_path)
+
+    candidates = score_candidates(candidates, cfg, analysis_data=analysis)
+    out_path = write_json(candidates_path, candidates)
+    logger.info(
+        "%d candidates scored (v%s) -> %s",
+        len(candidates["candidates"]),
+        candidates["scoring_version"],
+        out_path,
+        extra={"stage": "score", "artifact": str(out_path)},
+    )
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "candidates": len(candidates["candidates"]),
+                    "scoring_version": candidates["scoring_version"],
+                    "candidates_version": SCORED_CANDIDATES_VERSION,
+                    "input": str(candidates_path),
+                    "output": str(out_path),
+                },
+                sort_keys=True,
+            )
+        )
+
+
+def _candidates_json_path(path: Path) -> Path:
+    """Accept a project dir (containing candidates.json) or a candidates JSON doc."""
+    if path.is_dir():
+        return path / "candidates.json"
+    if not path.is_file():
+        raise PipelineError(
+            f"candidates input not found: {path}",
+            hint="run `clipper segment` first, then `clipper score CANDIDATES_DIR_OR_JSON`",
+        )
+    return path
 
 
 @app.command(help="Rank candidates.json to top-N (Sprint 6).")

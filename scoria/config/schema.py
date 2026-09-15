@@ -22,8 +22,17 @@ from scoria.errors import ConfigError
 _SUPPORTED_CONFIG_VERSION = 1
 
 # Terms disabled when the transcript signal is unavailable (SCORING_ENGINE.md §5).
+# `completeness` grades sentence-boundary alignment — with no transcript there are
+# no sentence boundaries, so it degrades to the silent-transcript path too.
 TRANSCRIPT_DISABLED_TERMS: frozenset[str] = frozenset(
-    {"speech_density", "pacing", "hook", "keyword_density", "sentence_quality"}
+    {
+        "speech_density",
+        "pacing",
+        "hook",
+        "completeness",
+        "keyword_density",
+        "sentence_quality",
+    }
 )
 # Terms whose weight is 0 (disabled by default).
 ZERO_WEIGHT_TERMS: frozenset[str] = frozenset({"face_presence"})
