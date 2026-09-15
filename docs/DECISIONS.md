@@ -88,10 +88,22 @@ decisions are superseded, never edited retroactively.
 - **Decision:** The transcript golden is a **frozen static JSON file** (`tests/fixtures/transcript_small.json`, whisper 1.9.4 `-ojf` shape) that tests parse → normalize → group without any STT tool. A **real-bridge smoke test** (decode → whisper-cli → parse, asserting non-empty `words` and correct sidecar naming) is gated behind explicit env (`SCORIA_WHISPER_BIN` + `SCORIA_WHISPER_MODEL`) and skipped otherwise. `espeak-ng` remains an **optional** test-only dependency for fixtures that need real speech (as TESTING.md §2 allows).
 - **Consequences:** CI stays offline and whisper-free (all goldens pass without STT); the real bridge is still exercised on dev machines via the env-gated smoke. No audio fixture generation is required in tests.
 - Status: **Accepted (Sprint 3).**
+
+## ADR-015 — Sprint 4 scope: `visual/` = ffmpeg `scdet` scene changes only; motion intensity deferred (resolves Open Question 2)
+- **Context:** OQ2 asked whether S4's "minimal scene detection" should be a formal `visual/` module. S4 needs scene cuts as candidate boundaries now; `visual_activity` (motion) and faces are scoring/reframing signals that are not required for boundaries.
+- **Decision:** A new `scoria/visual/` module ships **scene changes only**, read from ffmpeg's scdet filter INFO lines (`lavfi.scd.score`/`lavfi.scd.time`), computed in one pass at `fps=4,scale=64:36,format=gray` with `trim` preserving absolute timestamps. Threshold mapping: config `[0,1]` → scdet percentage ×100. Motion intensity / `visual_activity`/`face_presence` are deferred, but the `visual/` pass already emits `visual-info` (a stable contract) and the interface plus the `visual_activity` weight reserve their place.
+- **Consequences:** Scene-change boundaries work end-to-end in S4 (fixture = black→white hard cut); `visual_activity` scoring stays a no-op term until the motion pass lands; no OpenCV (per ADR-003). Visual is degradable (`--no-visual` → `visual: null`, `["visual"]` degraded) like the other stages.
+- Status: **Accepted (Sprint 4).**
+
+## ADR-016 — Boundary & candidate semantics for segmentation (dedupe, source order, window rules)
+- **Context:** Candidate starts/ends come from four heterogeneous sources (sentence/noun boundaries, silence intervals, scene changes) whose raw edits overlap by ms and order differently.
+- **Decision:** (1) All boundaries are unioned and **deduped within 50 ms** keeping the canonical source order `sentence_start, sentence_end, silence_start, silence_end, scene`; only the earliest surviving source label is kept per time. (2) Windows: A = nearest boundary to the preferred-length band (`segment.preferred`, tie → earlier), B = last boundary ≤ start + max_duration with a `hard_cut_margin` grace band, else hard cut at max+margin (`hard_cut` flag); ≤ `max_candidates_per_start` per start, duplicate (start,end) windows dropped. (3) Slices: sentences/words are half-open `[start,end)`, scene events are inclusive of their end, audio is a compact `[i0,i1]` window-index range.
+- **Consequences:** Deterministic, bounded O(boundaries) candidate counts; every rule is config-keyed; the raw contract is `analysis.json`-style JSON (`candidates.json`) for later scoring stages.
+- Status: **Accepted (Sprint 4).**
 ---
 
 ## Open questions
 1. Default output vertical (9:16) even for portrait 4:3 sources — decided yes (blur-pad), but keep `--no-vertical` escape.
-2. Whether S4's folded-in "minimal scene detection" should formally become a `visual/` module in S2 rather than S4 — see SPRINT_PLANNING §Sequencing notes; will be revisited during Sprint 4 spikes.
+2. Whether S4's folded-in "minimal scene detection" should formally become a `visual/` module in S2 rather than S4 — **Resolved in Sprint 4: `visual/` module exists (ADR-015), shipping scene changes only via scdet; motion deferred.**
 3. ~~`espeak-ng` for spoken fixture media — optional test-only dependency; decide in Sprint 3 whether fixtures are static JSON or need audio generation.~~ **Resolved in Sprint 3: static JSON golden primary, env-gated real-bridge smoke + optional espeak-ng (ADR-014).**
 4. CONFIGURATION.md §3's caption-readability rule (`captions.max_duration ≥ (chars_per_line·max_lines)/(wpm/60)`) was **not** implemented in the Sprint 0 config schema: the shipped defaults (`max_duration: 4.5`) contradict it, and it is really Sprint 7 (captions) logic. Decide at Sprint 7 whether to adopt it (then adjust defaults) or drop the rule; needs an ADR either way.

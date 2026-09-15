@@ -105,6 +105,10 @@ class KeywordsConfig(StrictModel):
     )
 
 
+class VisualConfig(StrictModel):
+    enabled: bool = True
+
+
 class TranscriptConfig(StrictModel):
     enabled: bool = True
     engine: Literal["whisper.cpp", "off"] = "whisper.cpp"
@@ -153,7 +157,7 @@ class SegmentConfig(StrictModel):
     min_duration: float = Field(default=20.0, ge=0.0)
     max_duration: float = Field(default=60.0, ge=0.0)
     preferred: PreferredConfig = Field(default_factory=PreferredConfig)
-    scene_detection_threshold: float = Field(default=0.35, ge=0.0)
+    scene_detection_threshold: float = Field(default=0.35, ge=0.0, le=1.0)
     max_candidates_per_start: int = Field(default=2, ge=1)
     hard_cut_margin: float = Field(default=0.25, ge=0.0)
 
@@ -402,6 +406,7 @@ class ScoriaConfig(StrictModel):
     media: MediaConfig = Field(default_factory=MediaConfig)
     input: InputConfig = Field(default_factory=InputConfig)
     transcript: TranscriptConfig = Field(default_factory=TranscriptConfig)
+    visual: VisualConfig = Field(default_factory=VisualConfig)
     audio: AudioConfig = Field(default_factory=AudioConfig)
     segment: SegmentConfig = Field(default_factory=SegmentConfig)
     scoring: ScoringConfig = Field(default_factory=ScoringConfig)

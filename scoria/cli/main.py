@@ -23,7 +23,8 @@ from scoria import envcheck
 from scoria.config import build_config, default_config, dump_yaml
 from scoria.errors import PipelineError, ScoriaError
 from scoria.ingest import MediaInfo, analyze_video
-from scoria.project import normalize, read_json, write_manifest
+from scoria.project import normalize, read_json, write_json, write_manifest
+from scoria.segment import build_candidates
 from scoria.transcript import whisper_cli_info, whisper_model_info
 from scoria.util import ffmpeg
 from scoria.util.logging import get_logger, setup_logging
@@ -75,6 +76,7 @@ def encode_summary(media: MediaInfo, analysis_path: Path) -> dict:
         "media": normalize(media),
         "audio": normalize(analysis.get("audio")),
         "transcript": normalize(analysis.get("transcript")),
+        "visual": normalize(analysis.get("visual")),
         "analysis": str(analysis_path),
     }
 
@@ -173,6 +175,7 @@ def analyze(
     config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
     profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
     no_transcript: bool = typer.Option(False, "--no-transcript", help="Skip STT"),
+    no_visual: bool = typer.Option(False, "--no-visual", help="Skip frame pass"),
     overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing project dir"),
     log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
     json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
@@ -185,6 +188,8 @@ def analyze(
         overrides.setdefault("project", {})["overwrite"] = True
     if no_transcript:
         overrides["transcript"] = {"enabled": False}
+    if no_visual:
+        overrides["visual"] = {"enabled": False}
     cfg = build_config(path=config_path, profile=profile, overrides=overrides)
     media, project_dir, degraded = analyze_video(str(video), cfg)
     tools = {name: ffmpeg.version(name) for name in ("ffmpeg", "ffprobe")}
@@ -215,10 +220,57 @@ def analyze(
         typer.echo(summary)
 
 
+def _analysis_json_path(path: Path) -> Path:
+    """Accept a project dir (containing analysis.json) or any JSON analysis doc."""
+    if path.is_dir():
+        return path / "analysis.json"
+    if not path.is_file():
+        raise PipelineError(
+            f"analysis input not found: {path}",
+            hint="run `clipper analyze VID` first, then `clipper segment ANALYSIS_DIR_OR_JSON`",
+        )
+    return path
+
+
 @app.command(help="Produce raw candidates.json from analysis (Sprint 4).")
 @_cmd
-def segment(path: Path) -> None:
-    _not_implemented("segment")
+def segment(
+    path: Path = typer.Argument(..., help="analysis.json or a scoria project dir"),
+    config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
+    profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
+    log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
+):
+    setup_logging(log_level)
+    cfg = build_config(path=config_path, profile=profile)
+    analysis_path = _analysis_json_path(path)
+    analysis = read_json(analysis_path)
+    if not isinstance(analysis, dict) or analysis.get("schema") != "analysis":
+        raise PipelineError(
+            f"not an analysis document (schema != 'analysis'): {analysis_path}",
+            hint="run `clipper analyze VID` first, then `clipper segment <analysis.json>`",
+        )
+    candidates = build_candidates(analysis, cfg)
+    out_path = write_json(analysis_path.parent / "candidates.json", candidates)
+    logger.info(
+        "%d boundaries -> %d candidates -> %s",
+        len(candidates["boundaries"]),
+        len(candidates["candidates"]),
+        out_path,
+        extra={"stage": "segment", "artifact": str(out_path)},
+    )
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "candidates": len(candidates["candidates"]),
+                    "boundaries": len(candidates["boundaries"]),
+                    "input": str(analysis_path),
+                    "output": str(out_path),
+                },
+                sort_keys=True,
+            )
+        )
 
 
 @app.command(help="Score candidates.json (Sprint 5).")

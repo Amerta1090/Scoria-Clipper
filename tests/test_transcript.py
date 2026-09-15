@@ -202,15 +202,35 @@ def test_group_sentences_merges_short_sentence_backwards():
     assert [(s.text, s.start, s.end) for s in sentences] == [("A b solo", 0.0, 5.5)]
 
 
+def test_group_sentences_ignore_whisper_segments():
+    _, words, ends = parse_whisper(_fixture_json())
+    words = normalize_words(words)
+    with_hints = group_sentences(
+        words,
+        max_gap_seconds=1.2,
+        min_sentence_words=2,
+        force_punctuation=True,
+        segment_end_indices=ends,
+    )
+    without = group_sentences(
+        words,
+        max_gap_seconds=1.2,
+        min_sentence_words=2,
+        force_punctuation=True,
+        segment_end_indices=(),
+    )
+    # whisper's tahu->cara / konten->viral hints split sentences that pure gap
+    # math (0.40 s gap) absorbs, so dropping the hints changes the grouping.
+    assert [(s.text, len(s.words)) for s in with_hints] != [(s.text, len(s.words)) for s in without]
+
+
 def test_group_sentences_disabled_punctuation_and_empty():
     words = normalize_words([Word(text="apa", start=0.0, end=1.0)])
     sentences = group_sentences(
         words, max_gap_seconds=1.2, min_sentence_words=2, force_punctuation=False
     )
     assert sentences[0].text == "Apa"  # capitalized, no mark
-    empty = group_sentences(
-        [], max_gap_seconds=1.2, min_sentence_words=2, force_punctuation=True
-    )
+    empty = group_sentences([], max_gap_seconds=1.2, min_sentence_words=2, force_punctuation=True)
     assert empty == []
 
 
@@ -227,9 +247,7 @@ def _golden_sentences():
 
 
 def test_analyze_transcript_enabled(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        "scoria.transcript.pipeline.run_whisper", lambda *a, **k: _fixture_json()
-    )
+    monkeypatch.setattr("scoria.transcript.pipeline.run_whisper", lambda *a, **k: _fixture_json())
     info, degraded = analyze_transcript(
         tmp_path / "in.mp4", _cfg(transcript={"enabled": True}), temp_dir=tmp_path
     )
@@ -245,6 +263,18 @@ def test_analyze_transcript_enabled(monkeypatch, tmp_path):
     assert info.word_count == 18
     assert info.sentence_count == 4
     assert [(s.text, s.start, s.end, len(s.words)) for s in info.sentences] == _golden_sentences()
+
+
+def test_analyze_transcript_segment_from_whisper_false(monkeypatch, tmp_path):
+    monkeypatch.setattr("scoria.transcript.pipeline.run_whisper", lambda *a, **k: _fixture_json())
+    info, degraded = analyze_transcript(
+        tmp_path / "in.mp4",
+        _cfg(transcript={"enabled": True, "segment_from_whisper": False}),
+        temp_dir=tmp_path,
+    )
+    assert degraded == []
+    assert info is not None
+    assert info.sentence_count != 4  # whisper segment hints are ignored
 
 
 def test_analyze_transcript_disabled_flag(tmp_path):
@@ -291,9 +321,7 @@ def test_analyze_transcript_missing_binary_raises(tmp_path):
 
 
 def test_analyze_video_writes_transcript(tmp_path, planted, monkeypatch):
-    monkeypatch.setattr(
-        "scoria.transcript.pipeline.run_whisper", lambda *a, **k: _fixture_json()
-    )
+    monkeypatch.setattr("scoria.transcript.pipeline.run_whisper", lambda *a, **k: _fixture_json())
     project = tmp_path / "proj"
     cfg = _cfg(project={"dir": str(project)}, transcript={"enabled": True})
     _, project_dir, degraded = analyze_video(str(planted), cfg)
@@ -304,9 +332,7 @@ def test_analyze_video_writes_transcript(tmp_path, planted, monkeypatch):
     assert transcript["schema"] == TRANSCRIPT_SCHEMA
     assert transcript["word_count"] == 18
     assert transcript["sentence_count"] == 4
-    assert [s["text"] for s in transcript["sentences"]] == [
-        text for text, *_ in GOLDEN_SENTENCES
-    ]
+    assert [s["text"] for s in transcript["sentences"]] == [text for text, *_ in GOLDEN_SENTENCES]
 
 
 def test_analyze_video_transcript_disabled_key(tmp_path, planted):
@@ -319,9 +345,7 @@ def test_analyze_video_transcript_disabled_key(tmp_path, planted):
 
 
 def test_analyze_video_transcript_deterministic(tmp_path, planted, monkeypatch):
-    monkeypatch.setattr(
-        "scoria.transcript.pipeline.run_whisper", lambda *a, **k: _fixture_json()
-    )
+    monkeypatch.setattr("scoria.transcript.pipeline.run_whisper", lambda *a, **k: _fixture_json())
     project = tmp_path / "proj"
     cfg = _cfg(project={"dir": str(project), "overwrite": True}, transcript={"enabled": True})
     analyze_video(str(planted), cfg)
@@ -341,9 +365,7 @@ def test_whisper_cli_info_none_when_missing():
 
 
 def test_whisper_model_info_missing_file(tmp_path):
-    info = whisper_model_info(
-        _cfg(transcript={"model": str(tmp_path / "missing.bin")}).transcript
-    )
+    info = whisper_model_info(_cfg(transcript={"model": str(tmp_path / "missing.bin")}).transcript)
     assert info == {"path": str(tmp_path / "missing.bin"), "sha256": ""}
 
 

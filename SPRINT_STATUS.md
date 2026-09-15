@@ -4,21 +4,24 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 3 — Transcript pipeline** (status: **done**, this commit).
-> Current sprint: **Sprint 4 — Segmentation + candidates** (status: pending).
-> Next action (Sprint 4): boundary builder + window generator — sentence starts/ends from
-> `analysis.json.transcript`, silence intervals from audio, scene changes from visual; degenerate
-> to silence+scene when `transcript: null` (resolves DECISIONS.md Open Question 2).
-> Sprint 3 landed: `transcript/` module — whisper.cpp 1.9.4 bridge pinned to `-bs 0 -nt -np -sow
-> -nfa -dtw <preset> -ojf` (flash-attn off + DTW or there are no timestamps), words rebuilt from
-> per-token `t_dtw` centisecond BPE tokens (no `words[]` in ≥ 1.9 JSON, ADR-013), monotonic snap +
-> sentence grouping (gap ≥ 1.2 s, whisper segment end + gap ≥ 0.30 s, < 2 words merge back) with
-> `?`/`.` inference from en+id question starters, degraded path `transcript: null` only via flag;
-> wired into `analyze_video` (3-tuple) + `analysis.json.transcript` + manifest `whisper-cli`/
-> `whisper-model` stamps; CLI: analyze `--no-transcript`, `fetch-model`, verify-env whisper version +
-> model checksum; golden fixture `transcript_small.json` (ADR-014) + `test_transcript.py` (20 tests;
-> 116 total green); real bridge e2e validated live on `ggml-small.bin` via an absolute binary path
-> (`201028 < 44.7 s`-class run, words+sentences produced).
+> Last sprint: **Sprint 4 — Segmentation + candidates** (status: **done**, this commit).
+> Current sprint: **Sprint 5 — Scoring engine** (status: pending).
+> Next action (Sprint 5): `score/` module — SCORING_ENGINE.md exact implementation: per-candidate
+> feature slices (already embedded in candidates.json), sub-scores in [0,1] with config weights
+> normalized to 1 across enabled terms, penalties (edge_silence → flub), ScoreBreakdown with
+> function ids, SCORING_VERSION stamping; `visual_activity` term stays a config-weight no-op until
+> the motion pass lands (ADR-015).
+> Sprint 4 landed: `visual/` module — ffmpeg `scdet` INFO-line scene changes (`resolves DECISIONS.md
+> OQ2`, ADR-015; `scene_detection_threshold` [0,1] → scdet %×100, single gray 4fps 64×36 pass with
+> `trim` preserving absolute timestamps, degradable `--no-visual`); `segment/` module — boundary
+> builder (union of sentence/silence/scene, 50 ms dedupe, canonical source order) + window generator
+> (A = nearest preferred-band boundary, B = last-before-max with `hard_cut_margin`, hard-cut fallback,
+> ≤ max_candidates_per_start, duplicate-window drop, ADR-016) → raw `candidates.json` (schema
+> `candidates`, slices half-open/inclusive per source, compact audio window range); wired into
+> `analyze_video` (`analysis.json.visual` + degraded) + `clipper segment` CLI; fixture
+> `analysis_small.json` (14-candidate golden) + `test_segment.py`/`test_visual.py`; `segment_from_whisper`
+> now actually gates whisper segment hints (S3 drift reconciled); 137 tests + 1 skip green, ruff clean,
+> end-to-end analyze+segment smoke OK.
 
 ## Milestone
 
@@ -32,7 +35,7 @@ it at session end (same commit as the work or a `chore(status):` commit).
 | 1 | Ingestion | **done** | ffprobe metadata, validation, stdin (analysis.json.media) |
 | 2 | Audio analysis | **done** | PCM pass, energy/RMS/silence/loudness/peaks (analysis.json.audio) |
 | 3 | Transcript pipeline | **done** | whisper bridge + grouping, deferred OQ3 (ADRs 013, 014) |
-| 4 | Segmentation + candidates | pending | boundary builder, window generator (needs scene list) |
+| 4 | Segmentation + candidates | **done** | visual/ scdet scenes + segment/ boundaries+windows (ADRs 015, 016) |
 | 5 | Scoring engine | pending | SCORING_ENGINE.md exact implementation |
 | 6 | Ranking + diversity | pending | greedy marginal-gain with overlap/sim/gap |
 | 7 | Captions | pending | SRT/ASS + karaoke + line builder |
@@ -74,12 +77,19 @@ get a DECISIONS.md ADR.)_
   offsets in this build are garbage; parser uses tokens only. Greedy needs `-bs 0` (default is beam 5).
 - Sprint 3: `segment_from_whisper` config key exists as schema but the bridge reads whisper segment
   boundaries implicitly via `segment_end_indices`; the flag is unused by MVP grouping (segments are
-  always the hint, per ADR-013 design) — reconcile/remove in Sprint 4 align step.
+  always the hint, per ADR-013 design) — **reconciled in Sprint 4: the flag now really gates the hints
+  (`segment_from_whisper: false` → `segment_end_indices=()`); two new tests lock it in.**
 - Sprint 3: during development whisper-cli lived off-PATH at `/tmp/…/whisper.cpp/build/bin/whisper-cli`,
   so all real e2e used an absolute `transcript.binary` (supported: path-with-separator). The 488 MB
   `model/ggml-small.bin` stays untracked (.gitignore); its sha is pinned in DEPENDENCIES.md/ADR-013.
 - Sprint 3: fixtures are static JSON (ADR-014) — no speech audio in CI; a real-bridge smoke test is
   env-gated (`SCORIA_WHISPER_BIN` + `SCORIA_WHISPER_MODEL`) and skipped by default.
+- Sprint 4: the `analysis_small.json` golden yields **14** candidates, not the 10 in the original S4
+  plan — the window generator also emits for starts at sentence starts 4 s and 12 s, and band-A can
+  pick a longer/two windows later in the video (durations ≥ pref when the timeframe allows).
+- Sprint 4: scdet emits **percentage-scale** scores and the config's `[0,1]` threshold is scaled ×100 —
+  a "0.35" config is scdet `threshold=35`. A testsrc2→smptebars test cut scored only ~31 (below the
+  0.35 config) so the visual fixture uses black→white (score 99.609 at t=2.0).
 
 ## Known risks / watch items
 
@@ -91,7 +101,7 @@ get a DECISIONS.md ADR.)_
 - Decide during Sprint 3 whether fixture transcripts are static JSON or `espeak-ng`-generated audio
   (DECISIONS.md Open Question 3). **Resolved Sprint 3: static JSON primary (ADR-014).**
 - Confirm whether Sprint 4's minimal scene detection lives in `segment/` or as a `visual/` module
-  (DECISIONS.md Open Question 2).
+  (DECISIONS.md Open Question 2). **Resolved Sprint 4: `visual/` module, scdet-only, motion deferred (ADR-015).**
 - Real-video sanity runs (STT latency, real boundary/cut quality, PRD §8 cold-start) use untracked captures
   in `sample raw/` (git-ignored; e.g. a live-streaming gamer video) — manual, never CI (TESTING.md §2.1).
 

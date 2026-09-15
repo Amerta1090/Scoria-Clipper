@@ -48,6 +48,9 @@ transcript:
   keywords:                 # keyword density list
     terms: ["kunci", "tips", "cara", "tutorial", "review", "harga"]
 
+visual:
+  enabled: true               # false == `--no-visual` → analysis.json.visual: null
+
 audio:
   window_ms: 50
   analyze_start: 0.0         # only analyze [start, end] when set
@@ -63,7 +66,7 @@ segment:
   min_duration: 20.0
   max_duration: 60.0
   preferred: {min: 35, max: 45}
-  scene_detection_threshold: 0.35     # scdet-style scene cut threshold
+  scene_detection_threshold: 0.35     # [0,1]; ×100 → scdet filter percentage
   max_candidates_per_start: 2
   hard_cut_margin: 0.25               # grace when sentence > max_duration (seconds)
 

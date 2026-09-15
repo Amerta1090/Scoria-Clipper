@@ -46,7 +46,7 @@ def analyze_transcript(
         max_gap_seconds=config.transcript.sentence.max_gap_seconds,
         min_sentence_words=config.transcript.sentence.min_sentence_words,
         force_punctuation=config.transcript.sentence.force_punctuation,
-        segment_end_indices=segment_end_indices,
+        segment_end_indices=segment_end_indices if config.transcript.segment_from_whisper else (),
     )
     info = TranscriptInfo(
         schema=TRANSCRIPT_SCHEMA,

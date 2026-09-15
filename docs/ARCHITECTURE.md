@@ -101,14 +101,19 @@ planning reference.
   the render normalization gain, and as an info field).
 - Deterministic: fixed window, fixed threshold, numpy reduction over the exact same float array. No RNG.
 
-### 5.2 Visual
-- Single low-cost pass: `ffmpeg -i in -an -vf "fps=4,scale=64:36,format=gray" -f rawvideo -pix_fmt gray -` →
-  2304 bytes/frame → numpy.
-- **Motion intensity** at frame `i` = mean abs difference (frame i − frame i−1), then smoothed.
-- **Scene change** = thresholded motion spike at analysis FPS, cross-checked against ffmpeg `scdet`
-  scores (we read the scores, don't re-encode). Scene boundaries recorded at media timestamps.
-- This is deliberately decimated + grayscale: deterministic, cheap, and independent of source codec
-  internals at 4 fps sampling.
+### 5.2 Visual (Sprint 4 scope: scene changes only)
+- **Scene changes:** one decimated pass
+  `ffmpeg -v info -vf "trim=…,fps=4,scale=64:36,format=gray,scdet=threshold=<config×100>" -f null -`
+  and the INFO lines `lavfi.scd.score` / `lavfi.scd.time` are parsed (no re-encode). `threshold` is
+  `segment.scene_detection_threshold` (0–1) scaled onto scdet's percentage scale; stored scores are
+  normalized back to [0,1] in `visual-info`. `trim` preserves absolute media timestamps (an input-side
+  `-ss` would reset them). Deterministic: decimated gray sampling, fixed threshold, no RNG.
+- **Motion intensity** (mean frame-to-frame diff) and the derived `visual_activity` sub-score are
+  **deferred to a later sprint**; the `visual/` module interface and the `visual_activity` weight already
+  reserve their place (ADR-003 keeps OpenCV out of the MVP).
+- Degradation: visual disabled (`--no-visual` / `visual.enabled: false`) → `analysis.json.visual: null`,
+  `manifest.degraded: ["visual"]`, boundaries from silence + sentences only. An **enabled** visual pass
+  that fails (ffmpeg error) **fails the run** (exit 1) like the other analysis stages.
 
 ### 5.3 Transcript
 - Bridge to `whisper-cli` (whisper.cpp, v1.9.x) with deterministic settings: fixed model file
