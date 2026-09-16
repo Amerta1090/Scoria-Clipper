@@ -24,6 +24,7 @@ from scoria.config import build_config, default_config, dump_yaml
 from scoria.errors import PipelineError, ScoriaError
 from scoria.ingest import MediaInfo, analyze_video
 from scoria.project import normalize, read_json, write_json, write_manifest
+from scoria.rank import RANK_VERSION, rank_candidates
 from scoria.score import score_candidates
 from scoria.score.models import SCORED_CANDIDATES_VERSION
 from scoria.segment import CANDIDATES_VERSION, build_candidates
@@ -341,10 +342,57 @@ def _candidates_json_path(path: Path) -> Path:
     return path
 
 
-@app.command(help="Rank candidates.json to top-N (Sprint 6).")
+@app.command(help="Rank scored candidates.json → diverse top-N (Sprint 6).")
 @_cmd
-def rank(path: Path) -> None:
-    _not_implemented("rank")
+def rank(
+    path: Path = typer.Argument(..., help="candidates.json or a scoria project dir"),
+    top: int = typer.Option(3, "-t", "--top", min=0, help="Max clips to select"),
+    config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
+    profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
+    log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
+):
+    setup_logging(log_level)
+    cfg = build_config(path=config_path, profile=profile)
+    candidates_path = _candidates_json_path(path)
+    candidates = read_json(candidates_path)
+    if not isinstance(candidates, dict) or candidates.get("schema") != "candidates":
+        raise PipelineError(
+            f"not a candidates document (schema != 'candidates'): {candidates_path}",
+            hint="run `clipper segment <analysis.json>` first",
+        )
+    scored = any(isinstance(c.get("score"), dict) for c in candidates.get("candidates", []))
+    if not scored:
+        raise PipelineError(
+            "rank needs scored candidates (no embedded ScoreBreakdown found)",
+            hint="run `clipper score <candidates.json>` first, then `clipper rank`",
+        )
+    ranking = rank_candidates(candidates, cfg, top=top)
+    out_path = write_json(candidates_path.parent / "ranking.json", ranking)
+    logger.info(
+        "ranked %d candidates -> %d selected%s -> %s",
+        len(candidates["candidates"]),
+        len(ranking["selected"]),
+        f" ({ranking['stop_reason']})" if ranking["stopped"] else "",
+        out_path,
+        extra={"stage": "rank", "artifact": str(out_path)},
+    )
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "candidates": len(candidates["candidates"]),
+                    "selected": len(ranking["selected"]),
+                    "rejected": len(ranking["rejected"]),
+                    "stopped": ranking["stopped"],
+                    "stop_reason": ranking["stop_reason"],
+                    "rank_version": RANK_VERSION,
+                    "input": str(candidates_path),
+                    "output": str(out_path),
+                },
+                sort_keys=True,
+            )
+        )
 
 
 @app.command(help="Render ranking.json → clips/ + captions/ (Sprint 9).")

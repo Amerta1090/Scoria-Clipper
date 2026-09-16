@@ -100,6 +100,13 @@ decisions are superseded, never edited retroactively.
 - **Decision:** (1) All boundaries are unioned and **deduped within 50 ms** keeping the canonical source order `sentence_start, sentence_end, silence_start, silence_end, scene`; only the earliest surviving source label is kept per time. (2) Windows: A = nearest boundary to the preferred-length band (`segment.preferred`, tie → earlier), B = last boundary ≤ start + max_duration with a `hard_cut_margin` grace band, else hard cut at max+margin (`hard_cut` flag); ≤ `max_candidates_per_start` per start, duplicate (start,end) windows dropped. (3) Slices: sentences/words are half-open `[start,end)`, scene events are inclusive of their end, audio is a compact `[i0,i1]` window-index range.
 - **Consequences:** Deterministic, bounded O(boundaries) candidate counts; every rule is config-keyed; the raw contract is `analysis.json`-style JSON (`candidates.json`) for later scoring stages.
 - Status: **Accepted (Sprint 4).**
+
+## ADR-017 — Ranking penalty scale: λ·ratios applied in 0–100 score-units (Sprint 6 interpretation)
+- **Context:** SCORING_ENGINE.md §7 leaves `ov_pen/sim_pen/gap_pen` dimensionless while candidates score 0–100 and `min_margin` defaults to 20. If penalties were λ·ratio added to a normalized 0–1 total, a fully-overlapping sibling of an equal-score clip would still retain ~99 % of its value and the sprint AC ("never 3 picks from the same minute") would fail: greedy would keep stacking the same minute.
+- **Decision:** Ranking penalties are computed on the **0–100 score scale**: `ov_pen = 100·λ_ov·min(1, Σ overlap_seconds over chosen / duration)`, `sim_pen = 100·λ_sim·max over chosen Jaccard(normalized token sets from `keyword_density.window_words`)`, `gap_pen = 100·λ_gap·clamp((preferred_gap − gap_to_nearest_chosen)/preferred_gap, 0, 1)` with `preferred_gap = preferred_gap_factor·duration`. A fully overlapping clip loses its whole score (σ → ~0 under margin ≥ 0), margins/tie-breaks compare directly to totals, and `min_margin` (default 20) is a real 20-point cut. Ties resolve by (earliest start, stable id). `hard_min_start_gap` is a hard exclusion (recorded, not scored). Greedy is O(n·k) with the DP alternative reserved behind the same interface (ADR-006).
+- **Consequences:** `rank_candidates` is pure (candidates.json + config → ranking.json), every selection stores its gain decomposition + `gain_note`, and the full per-step marginal-gain log lives in `ranking.json.decisions` so `explain` can report why a top candidate was dropped. On the Sprint 5 golden fixture the default-margin top-3 stops early with `[c0006, c0014]` (margin stop) — the crowded 12–70 s minute contributes one clip.
+- Status: **Accepted (Sprint 6).**
+
 ---
 
 ## Open questions

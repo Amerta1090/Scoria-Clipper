@@ -4,20 +4,22 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 5 — Scoring engine** (status: **done**, this commit).
-> Current sprint: **Sprint 6 — Ranking + diversity** (status: pending).
-> Next action (Sprint 6): greedy marginal-gain ranking (SCORING_ENGINE.md §7) + diversity constraints — `rank/`
-> module, `clipper rank` CLI, `RankingConfig` lens, `ranking.json` contract, CC0 fixture labels (TESTING.md §6).
-> Sprint 5 landed: `score/` module — `score_candidates()` first-pass (analysis.json) / re-score (embedded
-> inputs) with config-only determinism (CLI_SPEC: score = f(candidates.json, config)); terms
-> `audio_energy/speech_density/pacing/hook/completeness/visual_activity(no-op ADR-015)/keyword_density/sentence_quality`
-> + penalties `edge_silence/dead_air/mid_sentence_start/mid_word_end/low_energy_tail/flub_repeats/peak_clipping`,
-> all capped & total-capped; `ScoreBreakdown` stamps `scoring_version` + `signals_disabled` + `renorm_factor`,
-> every term/penalty embeds its inputs; `completeness` added to `TRANSCRIPT_DISABLED_TERMS`; `clipper score`
-> CLI (dir or candidates.json, `--json`, exit 1 missing sibling analysis on first pass / exit 2 bad config);
-> fixture golden totals pinned to 4 decimals (c0001 64.0449 … c0012 42.8110 mid_sentence, 75.2809 family,
-> 32.8090 mid_word family); 192 tests + 1 skip green (was 137+1), ruff clean; re-score byte-identical; bug:
-> edge-silence exact-tol float fill missed trailing silence (40.0−39.6 < 0.4) — `_EDGE_EPS` guard.
+> Last sprint: **Sprint 6 — Ranking + diversity** (status: **done**, this commit).
+> Current sprint: **Sprint 7 — Captions** (status: pending).
+> Next action (Sprint 7): captions — SRT/ASS output + karaoke timing + line builder (`captions/` module,
+> `clipper captions` CLI, `captions` config lens; SPRINT_PLANNING.md §S7 + CONFIGURATION.md §3's imported
+> caption-readability rule — see DECISIONS.md Open Question 4).
+> Sprint 6 landed: `rank/` module — `rank_candidates()` pure greedy marginal-gain (SCORING_ENGINE.md §7);
+> ov/sim/gap penalties pinned to **0–100 score-units × λ-ratio** (ADR-017): overlap summed over chosen capped
+> at 1.0× duration (full overlap ≈ whole score lost), sim = max Jaccard over chosen (exact-term only,
+> `keyword_density.window_words` sets), gap to nearest chosen with `preferred_gap = factor·duration`;
+> `hard_min_start_gap` is a hard exclusion (recorded `excluded: hard_start_gap`, never scored); order
+> (score desc, start asc), ties (start asc, id asc); margin stop (min_margin 20) with full per-step
+> `decisions[]` marginal-gain log + per-pick `gain_note`; `clipper rank` CLI (dir or candidates.json,
+> `--top`/`--json`, writes `ranking.json`, exit 1 unscored / missing ScoreBreakdown, exit 2 bad config);
+> ranking.json contract = `RankingInfo` (schema "ranking", RANKING_VERSION 1, RANK_VERSION
+> greedy.marginal_gain.v1); CC0 fixture labels (tests/fixtures/ranking_labels.json) → real-golden precision
+> 1.0 / recall 2/8; 214 tests + 1 skip green (was 192+1), rank/ at 100 % line coverage, ruff clean.
 
 ## Milestone
 
@@ -33,7 +35,7 @@ it at session end (same commit as the work or a `chore(status):` commit).
 | 3 | Transcript pipeline | **done** | whisper bridge + grouping, deferred OQ3 (ADRs 013, 014) |
 | 4 | Segmentation + candidates | **done** | visual/ scdet scenes + segment/ boundaries+windows (ADRs 015, 016) |
 | 5 | Scoring engine | **done** | score/ module + `clipper score`, golden totals pinned, this commit |
-| 6 | Ranking + diversity | pending | greedy marginal-gain with overlap/sim/gap |
+| 6 | Ranking + diversity | **done** | greedy marginal-gain with overlap/sim/gap, `clipper rank`, ADR-017, this commit |
 | 7 | Captions | pending | SRT/ASS + karaoke + line builder |
 | 8 | Vertical reframing | pending | center crop + blur-pad geometry |
 | 9 | FFmpeg rendering | pending | filter graph, static gain, burn-in, atomic output |
@@ -91,6 +93,14 @@ get a DECISIONS.md ADR.)_
 - Sprint 5: the enriched document's floats are serialized under the 4-decimal contract (ADR-010) — the
   pinned golden totals (e.g. c0001 64.0449) are the **normalized** doc values, so a byte-identical re-score
   is guaranteed by construction (inputs are contract-normalized at feature-build time).
+- Sprint 6: SCORING_ENGINE.md §7's penalties were ambiguous as dimensionless λ; pinned by ADR-017 as
+  **0–100 score-units × λ-ratio** (not a normalized 0–1 total) because the normalized reading would leave a
+  fully-overlapping equal-score sibling at ~99 % of its value and break the "never 3 picks from the same
+  minute" AC — margin/tie-breaks must compare directly against the 0–100 totals.
+- Sprint 6: `_build_rejected` needs no best-gain scan — marginal gains are monotonically non-increasing per
+  candidate (penalties only grow as `chosen` grows), so a rejected clip's best gain is always its step-1
+  pre-choice gain; this also removed the "never had a marginal gain" rejected reason, which was unreachable
+  (step 1 evaluates every candidate before any choice exists, so everyone has a history entry).
 
 ## Known risks / watch items
 

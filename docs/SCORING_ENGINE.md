@@ -192,6 +192,15 @@ for k in 1..topN:
 - Every selection stores `gain_note` explaining which penalty was dominant, so `explain` on a ranking result
   shows why a top-6 candidate was rejected.
 
+**Scale (ADR-017, pinned by Sprint 6):** penalties are λ·ratio applied in **score-units on the 0–100 total
+scale** (i.e. ×100), so a fully overlapping clip loses its whole score and `min_margin` is directly
+comparable to a candidate's `total`. `ov_pen` sums overlap seconds over all chosen (capped at 1.0 ratio),
+`sim_pen` takes the max Jaccard over chosen (token sets from the `keyword_density` term's `window_words`),
+`gap_pen` measures the gap to the *nearest* chosen interval. `hard_min_start_gap` is a hard exclusion
+(recorded, not scored). Ties resolve by earliest start, then stable id (ARCHITECTURE.md §7). `clipper rank`
+writes `ranking.json` with the selected top-N (per-pick gain decomposition + `gain_note`) and the full
+per-step marginal-gain decision log (`decisions[]`), so a dropped candidate is always attributable.
+
 Alternative considered: global-optimal DP over the same cost. Rejected for MVP — greedy is O(n·k) vs DP space
 growth, and its decisions are trivially attributable. A DP can replace it later behind the same interface.
 

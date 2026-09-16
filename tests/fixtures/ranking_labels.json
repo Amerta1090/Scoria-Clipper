@@ -1,0 +1,22 @@
+{
+  "schema": "ranking_labels",
+  "version": 1,
+  "fixture": "analysis_small.json",
+  "license": "CC0-1.0",
+  "labels": {
+    "c0001": "good",
+    "c0002": "poor",
+    "c0003": "good",
+    "c0004": "poor",
+    "c0005": "poor",
+    "c0006": "good",
+    "c0007": "poor",
+    "c0008": "poor",
+    "c0009": "good",
+    "c0010": "good",
+    "c0011": "good",
+    "c0012": "poor",
+    "c0013": "good",
+    "c0014": "good"
+  }
+}
