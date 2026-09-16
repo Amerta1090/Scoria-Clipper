@@ -84,7 +84,7 @@ planning reference.
    │  rank:  greedy diverse top-N (overlap + Jaccard + spacing)    │
    ▼
  ranking.json
-   │  captions: words → lines → captions/out.srt + out.ass         │
+   │  captions: words → lines → captions.json + captions/<clip>.srt/.ass      │
    │  reframe:  focus plan (center for MVP) → crop+scale chain     │
    │  render:   ffmpeg trim/crop/scale/subs/static-gain/encode     │
    ▼
@@ -165,7 +165,7 @@ Default project dir: `<video>.scoria/` (config `project_dir`). Human-inspectable
 ├─ candidates.json      raw windows → per-candidate feature slices + ScoreBreakdown [STAGE 1+2]
 ├─ ranking.json         top-N with selection rationale
 ├─ clips/               clip-01.mp4 … (1080×1920, captions burned)
-├─ captions/            clip-01.srt, clip-01.ass (word-karaoke)
+├─ captions/            captions.json, c0006.srt / .ass (id-keyed, word-karaoke)
 ├─ previews/            per-candidate thumbnails, contact-sheet-*.jpg, score strip
 ├─ report.html          self-contained (inline CSS), score table + explain views
 └─ manifest.json        tool versions (ffmpeg, whisper model sha, scoria), config snapshot, SCORING_VERSION

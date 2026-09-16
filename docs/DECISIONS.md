@@ -107,10 +107,29 @@ decisions are superseded, never edited retroactively.
 - **Consequences:** `rank_candidates` is pure (candidates.json + config → ranking.json), every selection stores its gain decomposition + `gain_note`, and the full per-step marginal-gain log lives in `ranking.json.decisions` so `explain` can report why a top candidate was dropped. On the Sprint 5 golden fixture the default-margin top-3 stops early with `[c0006, c0014]` (margin stop) — the crowded 12–70 s minute contributes one clip.
 - Status: **Accepted (Sprint 6).**
 
+## ADR-018 — Caption readability rule adopted: `max_duration ≥ (chars_per_line·max_lines/5)/(wpm/60)` (resolves OQ4)
+- **Context:** OQ4 left Sprint 0's caption-readability rule from CONFIGURATION.md §3 unimplemented — the shipped
+  `captions.max_duration: 4.5` contradicted it — and required an ADR either way at Sprint 7. The literal rule
+  `max_duration ≥ (chars_per_line·max_lines)/(wpm/60)` is unusable with sensible reading speeds (42·2 = 84
+  "chars" as words would need ~1120 wpm to justify 4.5 s), so adopting it also pins the missing units.
+- **Decision:** (1) Adopt the rule with **5 chars ≈ 1 word** (average English word length) and a new
+  `captions.wpm` key (default **200**, the common prose reading speed). (2) The default `max_duration` becomes
+  **5.1** (the computed minimum 5.04 rounded up to 1 decimal): `(42·2/5)/(200/60) = 5.04 s`. (3) Validation is a
+  config-load error (exit 2) with the computed minimum in the message. (4) Line building is deterministic with
+  two documented correctness-over-style exceptions: a single word longer than `chars_per_line` occupies its own
+  line, and a single word longer than `max_duration` stays whole (words are never split or dropped).
+- **Consequences:** `CaptionsConfig` gains `wpm`; `max_duration` default 4.5 → 5.1; `tests/fixtures/config_good.yaml`
+  updated (40×2 chars @200 wpm ⇒ min 4.8, fixture now 5.0). `captions/lines.py` clamps window boundary words,
+  chunks by `max_duration` (span = last word end − first word start), wraps to ≤ `max_lines` lines ≤
+  `chars_per_line` chars, prefers sentence-end reflow when `prefer_sentence_breaks`, and drops blocks below
+  `min_word_count`. `captions.json` (`schema: captions`, CAPTIONS_VERSION 1) carries word timestamps per block so
+  ASS `\k` karaoke equals word spans and render (S9) can burn without re-reading analysis.
+- Status: **Accepted (Sprint 7).**
+
 ---
 
 ## Open questions
 1. Default output vertical (9:16) even for portrait 4:3 sources — decided yes (blur-pad), but keep `--no-vertical` escape.
 2. Whether S4's folded-in "minimal scene detection" should formally become a `visual/` module in S2 rather than S4 — **Resolved in Sprint 4: `visual/` module exists (ADR-015), shipping scene changes only via scdet; motion deferred.**
 3. ~~`espeak-ng` for spoken fixture media — optional test-only dependency; decide in Sprint 3 whether fixtures are static JSON or need audio generation.~~ **Resolved in Sprint 3: static JSON golden primary, env-gated real-bridge smoke + optional espeak-ng (ADR-014).**
-4. CONFIGURATION.md §3's caption-readability rule (`captions.max_duration ≥ (chars_per_line·max_lines)/(wpm/60)`) was **not** implemented in the Sprint 0 config schema: the shipped defaults (`max_duration: 4.5`) contradict it, and it is really Sprint 7 (captions) logic. Decide at Sprint 7 whether to adopt it (then adjust defaults) or drop the rule; needs an ADR either way.
+4. ~~CONFIGURATION.md §3's caption-readability rule (`captions.max_duration ≥ (chars_per_line·max_lines)/(wpm/60)`) was **not** implemented in the Sprint 0 config schema: the shipped defaults (`max_duration: 4.5`) contradict it, and it is really Sprint 7 (captions) logic. Decide at Sprint 7 whether to adopt it (then adjust defaults) or drop the rule; needs an ADR either way.~~ **Resolved in Sprint 7: rule adopted with 5 chars/word + `captions.wpm` (200) and `max_duration` default 5.1 (ADR-018).**

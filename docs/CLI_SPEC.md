@@ -52,7 +52,9 @@ Renders selected clips → `clips/`, captions → `captions/`; no analysis re-ru
 `--reframe`, `--no-burn`, `--crf`, `--preset`, `--force` (re-render even if present).
 
 ### `clipper captions <ranking.json>`
-Writes SRT + ASS only (no burn-in); useful for editing before render.
+Writes SRT + ASS sidecars (`captions/<clip-id>.srt|.ass`, word-karaoke `\k`) plus `captions/captions.json`
+(blocks + word timestamps); useful for editing before render. Exit 1 when ranking.json/transcript is missing,
+exit 2 on config error (readability rule, ADR-018).
 
 ### `clipper explain <project|ranking.json> <clip-id> [--json]`
 Prints the full `ScoreBreakdown` for one clip and, when a ranking decision is available, the marginal-gain

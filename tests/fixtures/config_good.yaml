@@ -6,4 +6,4 @@ media:
 captions:
   chars_per_line: 40
   max_lines: 2
-  max_duration: 4.5
+  max_duration: 5.0    # ≥ readability min (40·2/5)/(200/60) = 4.8 s (ADR-018)

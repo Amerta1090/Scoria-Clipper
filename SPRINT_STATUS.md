@@ -4,22 +4,20 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 6 — Ranking + diversity** (status: **done**, this commit).
-> Current sprint: **Sprint 7 — Captions** (status: pending).
-> Next action (Sprint 7): captions — SRT/ASS output + karaoke timing + line builder (`captions/` module,
-> `clipper captions` CLI, `captions` config lens; SPRINT_PLANNING.md §S7 + CONFIGURATION.md §3's imported
-> caption-readability rule — see DECISIONS.md Open Question 4).
-> Sprint 6 landed: `rank/` module — `rank_candidates()` pure greedy marginal-gain (SCORING_ENGINE.md §7);
-> ov/sim/gap penalties pinned to **0–100 score-units × λ-ratio** (ADR-017): overlap summed over chosen capped
-> at 1.0× duration (full overlap ≈ whole score lost), sim = max Jaccard over chosen (exact-term only,
-> `keyword_density.window_words` sets), gap to nearest chosen with `preferred_gap = factor·duration`;
-> `hard_min_start_gap` is a hard exclusion (recorded `excluded: hard_start_gap`, never scored); order
-> (score desc, start asc), ties (start asc, id asc); margin stop (min_margin 20) with full per-step
-> `decisions[]` marginal-gain log + per-pick `gain_note`; `clipper rank` CLI (dir or candidates.json,
-> `--top`/`--json`, writes `ranking.json`, exit 1 unscored / missing ScoreBreakdown, exit 2 bad config);
-> ranking.json contract = `RankingInfo` (schema "ranking", RANKING_VERSION 1, RANK_VERSION
-> greedy.marginal_gain.v1); CC0 fixture labels (tests/fixtures/ranking_labels.json) → real-golden precision
-> 1.0 / recall 2/8; 214 tests + 1 skip green (was 192+1), rank/ at 100 % line coverage, ruff clean.
+> Last sprint: **Sprint 7 — Captions** (status: **done**, this commit).
+> Current sprint: **Sprint 8 — Vertical reframing** (status: pending).
+> Next action (Sprint 8): reframe — center crop + blur-pad geometry, even-dim rounding, 1080×1920 out
+> (`reframe/` module, geometry table tests; SPRINT_PLANNING.md §S8 + CONFIGURATION.md §1's `reframe` lens).
+> Sprint 7 landed: `captions/` module — `build_captions()` (ranking.json + analysis.json + config →
+> captions.json), `build_clip_captions()` pure line builder (window clamping, max_duration chunks, ≤ max_lines
+> lines ≤ chars_per_line, sentence-end reflow under `prefer_sentence_breaks`, min_word_count drop), pure
+> SRT/ASS writers with word-karaoke `\k` (CAPTIONS_SCHEMA "captions", CAPTIONS_VERSION 1, CAPTION_VERSION
+> words_lines.v1); **ADR-018** resolved OQ4 (readability rule adopted: `min = (chars_per_line·max_lines/5)/
+> (wpm/60)`, new `captions.wpm` default 200, `max_duration` default 4.5 → 5.1, config-load error exit 2);
+> `clipper captions` CLI (sidecars `captions/<clip>.srt|.ass` id-keyed + `captions/captions.json`; exit 1
+> missing ranking/transcript, exit 2 bad config); golden SRT/ASS strings + parse-back round-trip + karaoke==word
+> spans tests; fixture `config_good.yaml` updated to readability-valid values. 243 tests + 1 skip green (was
+> 214+1), captions/ at 100 % line coverage, ruff clean.
 
 ## Milestone
 
@@ -36,7 +34,7 @@ it at session end (same commit as the work or a `chore(status):` commit).
 | 4 | Segmentation + candidates | **done** | visual/ scdet scenes + segment/ boundaries+windows (ADRs 015, 016) |
 | 5 | Scoring engine | **done** | score/ module + `clipper score`, golden totals pinned, this commit |
 | 6 | Ranking + diversity | **done** | greedy marginal-gain with overlap/sim/gap, `clipper rank`, ADR-017, this commit |
-| 7 | Captions | pending | SRT/ASS + karaoke + line builder |
+| 7 | Captions | **done** | captions/ module: lines + SRT/ASS + \k karaoke + readability (ADR-018), `clipper captions`, this commit |
 | 8 | Vertical reframing | pending | center crop + blur-pad geometry |
 | 9 | FFmpeg rendering | pending | filter graph, static gain, burn-in, atomic output |
 | 10 | Preview/report/explain | pending | thumbnails, contact sheet, report.html, explain renderers |
@@ -55,7 +53,7 @@ get a DECISIONS.md ADR.)_
 - Sprint 0: caption-readability rule (CONFIGURATION.md §3, `captions.max_duration ≥
   (chars_per_line·max_lines)/(wpm/60)`) is **not** implemented in the config schema — the defaults
   (`max_duration: 4.5`) contradict it, and it is conceptually Sprint 7 (captions) territory. Deferred to
-  Sprint 7; tracked as DECISIONS.md Open Question 4 (ADR required on adoption).
+  Sprint 7; tracked as DECISIONS.md Open Question 4 (ADR required on adoption). **Resolved Sprint 7: ADR-018.**
 - Sprint 0: dev tooling moved from `[project.optional-dependencies].dev` to PEP 735 `[dependency-groups] dev`
   (ADR-012) — `uv` would otherwise not install it by default, breaking `uv sync && pytest`.
 - Sprint 1: `run_ffprobe` drops `-nostdin` — the ffprobe build on this machine (n9.0.1) rejects it
@@ -101,6 +99,18 @@ get a DECISIONS.md ADR.)_
   candidate (penalties only grow as `chosen` grows), so a rejected clip's best gain is always its step-1
   pre-choice gain; this also removed the "never had a marginal gain" rejected reason, which was unreachable
   (step 1 evaluates every candidate before any choice exists, so everyone has a history entry).
+- Sprint 7: the AC "every caption ≤ max_duration" has a documented exception (ADR-018): a **single word**
+  longer than `max_duration` stays whole (words are never split or dropped). Multi-word blocks always respect
+  the bound; the fixture `analysis_small.json` happens to contain 6–20 s single words, so its caption blocks
+  are all single-word. The AC's "fixtures byte-match golden files" is satisfied by inline golden SRT/ASS
+  strings (same static-fixture strategy as ADR-014, no new binary fixtures).
+- Sprint 7: sidecar files are **id-keyed** (`captions/c0006.srt|.ass`), not the `clip-01.*` naming sketched in
+  ARCHITECTURE.md §6 — clip `id` is the stable rank-independent identity; ARCHITECTURE.md updated. Render (S9)
+  will decide final clip filename naming; `captions.json` carries both id and rank for the mapping.
+- Sprint 7: the readability rule's literal formula was unusable (see ADR-018) — adopted as
+  `(chars_per_line·max_lines/5)/(wpm/60)` with 5 chars ≈ 1 word and new `captions.wpm` (default 200);
+  `max_duration` default 4.5 → 5.1. `tests/fixtures/config_good.yaml` bumped `max_duration` 4.5 → 5.0 to stay
+  valid under its 40×2 chars (min 4.8).
 
 ## Known risks / watch items
 
@@ -109,10 +119,9 @@ get a DECISIONS.md ADR.)_
 - **Resolved (Sprint 1):** ffprobe n9.0.1 JSON probing verified on generated 16:9 / 9:16 / 4:3 / audio-only
   fixtures; duration/AR/timebase exact; VFR `avg_frame_rate` (e.g. `0/0`) recorded raw, timestamps normalized
   to seconds. Confirmed ffprobe builds diverge on CLI flags (`-nostdin` rejected) → see drift note.
-- Decide during Sprint 3 whether fixture transcripts are static JSON or `espeak-ng`-generated audio
-  (DECISIONS.md Open Question 3). **Resolved Sprint 3: static JSON primary (ADR-014).**
-- Confirm whether Sprint 4's minimal scene detection lives in `segment/` or as a `visual/` module
-  (DECISIONS.md Open Question 2). **Resolved Sprint 4: `visual/` module, scdet-only, motion deferred (ADR-015).**
+- Sprint 8+ watch: ASS burn-in needs libass (`subtitles` filter) at render time — captions are already
+  libass-shaped (V4+ styles, `Alignment 2` bottom-center, `margin_v` safe-area), and burn must degrade
+  gracefully to sidecar-only when libass is missing (Sprint 9 degraded path).
 - Real-video sanity runs (STT latency, real boundary/cut quality, PRD §8 cold-start) use untracked captures
   in `sample raw/` (git-ignored; e.g. a live-streaming gamer video) — manual, never CI (TESTING.md §2.1).
 

@@ -338,11 +338,25 @@ class CaptionsConfig(StrictModel):
     burn_in: bool = True
     chars_per_line: int = Field(default=42, ge=1)
     max_lines: int = Field(default=2, ge=1)
-    max_duration: float = Field(default=4.5, ge=0.1)
+    max_duration: float = Field(default=5.1, ge=0.1)
     min_word_count: int = Field(default=1, ge=1)
     prefer_sentence_breaks: bool = True
+    wpm: int = Field(default=200, ge=1)
     ass_style: AssStyleConfig = Field(default_factory=AssStyleConfig)
     safe_area_bottom: float = Field(default=0.25, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _check_readability(self) -> CaptionsConfig:
+        # ADR-018: a (full) caption must stay on screen long enough to be read.
+        # 5 chars ≈ 1 word; reading speed `wpm` → minimum on-screen seconds.
+        minimum = (self.chars_per_line * self.max_lines / 5.0) / (self.wpm / 60.0)
+        if self.max_duration < minimum:
+            raise ConfigError(
+                f"captions.max_duration {self.max_duration} is below the readability "
+                f"minimum {minimum:.2f}s = (chars_per_line·max_lines/5)/(wpm/60); "
+                "increase max_duration or lower chars_per_line/max_lines/wpm (ADR-018)"
+            )
+        return self
 
 
 class FocusConfig(StrictModel):

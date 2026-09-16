@@ -20,6 +20,7 @@ import typer
 from rich.console import Console
 
 from scoria import envcheck
+from scoria.captions import CAPTION_VERSION, CAPTIONS_VERSION, build_captions, write_ass, write_srt
 from scoria.config import build_config, default_config, dump_yaml
 from scoria.errors import PipelineError, ScoriaError
 from scoria.ingest import MediaInfo, analyze_video
@@ -401,10 +402,93 @@ def render(path: Path) -> None:
     _not_implemented("render")
 
 
-@app.command(help="Write SRT + ASS only from ranking.json (Sprint 7).")
+@app.command(help="Write SRT + ASS sidecars from ranking.json (Sprint 7).")
 @_cmd
-def captions(path: Path) -> None:
-    _not_implemented("captions")
+def captions(
+    path: Path = typer.Argument(..., help="ranking.json or a scoria project dir"),
+    config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
+    profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
+    log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
+):
+    setup_logging(log_level)
+    cfg = build_config(path=config_path, profile=profile)
+    ranking_path = _ranking_json_path(path)
+    ranking = read_json(ranking_path)
+    if not isinstance(ranking, dict) or ranking.get("schema") != "ranking":
+        raise PipelineError(
+            f"not a ranking document (schema != 'ranking'): {ranking_path}",
+            hint="run `clipper rank <candidates.json>` first",
+        )
+    analysis_path = ranking_path.parent / "analysis.json"
+    if not analysis_path.is_file():
+        raise PipelineError(
+            "captions need the sibling analysis.json (transcript words)",
+            hint=f"expected {analysis_path} next to {ranking_path}",
+        )
+    analysis = read_json(analysis_path)
+    transcript = analysis.get("transcript")
+    if not isinstance(transcript, dict) or transcript.get("schema") != "transcript-info":
+        raise PipelineError(
+            f"analysis has no transcript section: {analysis_path}",
+            hint="run `clipper analyze` with transcript enabled (whisper), then re-score/re-rank",
+        )
+    if not transcript.get("words"):
+        raise PipelineError(
+            "transcript has no word timestamps, cannot build captions",
+            hint="word timestamps need whisper -nfa --dtw (see DEPENDENCIES.md / ADR-013)",
+        )
+    doc = build_captions(ranking, analysis, cfg)
+    out_dir = ranking_path.parent / "captions"
+    write_json(out_dir / "captions.json", doc)
+    files: list[str] = []
+    for clip in doc.clips:
+        if not clip.captions:
+            continue
+        if "srt" in cfg.captions.format:
+            srt_path = out_dir / f"{clip.id}.srt"
+            srt_path.write_text(write_srt(clip.captions), encoding="utf-8")
+            files.append(str(srt_path))
+        if "ass" in cfg.captions.format:
+            ass_path = out_dir / f"{clip.id}.ass"
+            ass_path.write_text(write_ass(clip.captions, cfg.captions.ass_style), encoding="utf-8")
+            files.append(str(ass_path))
+    total_captions = sum(len(clip.captions) for clip in doc.clips)
+    logger.info(
+        "%d clips -> %d caption blocks, %d sidecar file(s) -> %s",
+        len(doc.clips),
+        total_captions,
+        len(files),
+        out_dir,
+        extra={"stage": "captions", "artifact": str(out_dir / "captions.json")},
+    )
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "clips": len(doc.clips),
+                    "captions": total_captions,
+                    "files": files,
+                    "caption_version": CAPTION_VERSION,
+                    "captions_version": CAPTIONS_VERSION,
+                    "input": str(ranking_path),
+                    "output": str(out_dir / "captions.json"),
+                },
+                sort_keys=True,
+            )
+        )
+
+
+def _ranking_json_path(path: Path) -> Path:
+    """Accept a project dir (containing ranking.json) or a ranking JSON doc."""
+    if path.is_dir():
+        return path / "ranking.json"
+    if not path.is_file():
+        raise PipelineError(
+            f"ranking input not found: {path}",
+            hint="run `clipper rank` first, then `clipper captions RANKING_DIR_OR_JSON`",
+        )
+    return path
 
 
 @app.command(help="Print the ScoreBreakdown for one clip (Sprint 10).")

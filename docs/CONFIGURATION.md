@@ -130,9 +130,10 @@ captions:
   burn_in: true               # render with subtitles filter
   chars_per_line: 42
   max_lines: 2
-  max_duration: 4.5           # max caption on-screen seconds
+  max_duration: 5.1           # max caption on-screen seconds (≥ readability min, ADR-018)
   min_word_count: 1
   prefer_sentence_breaks: true
+  wpm: 200                    # reading speed for the readability rule (ADR-018)
   ass_style:
     name: Caption
     font: "DejaVu Sans"
@@ -193,8 +194,10 @@ Each profile, when selected, is added to `manifest.json` so downstream users can
 
 - `scoring.weights` values ≥ 0; renormalized enabled sum ∈ [0.99, 1.01] or config load error.
 - `segment.min_duration ≤ preferred.min ≤ preferred.max ≤ max_duration`.
-- `captions.max_duration ≥ (chars_per_line·max_lines)/(wpm/60)` — i.e., caption must be physically
-  readable; otherwise error with the computed minimum.
+- `captions.max_duration ≥ (chars_per_line·max_lines/5)/(wpm/60)` — a full caption (worst case) must be
+  physically readable: 5 chars ≈ 1 word, reading speed `wpm` (default 200). Bump `max_duration` (default
+  5.1 = the 42×2/200 min rounded up) or lower chars/`wpm`; otherwise config load error with the computed
+  minimum (ADR-018).
 - `reframe.output` must be ≥ 2× even dims, orientation 9:16 exactly (`w/h == 9/16`).
 - `audio.silence.min_duration ≤ segment.min_duration/10` sanity.
 - Unknown key → error. `transcript.enabled: false` auto-disables speech-dependent scoring terms with a
