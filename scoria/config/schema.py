@@ -405,6 +405,7 @@ class VideoRenderConfig(StrictModel):
 
 class AudioRenderConfig(StrictModel):
     method: Literal["static_gain", "loudnorm"] = "static_gain"
+    codec: str = "aac"
     target_lufs: float = Field(default=-16.0)
     target_peak: float = Field(default=-1.5)
     lra: float = Field(default=11.0)

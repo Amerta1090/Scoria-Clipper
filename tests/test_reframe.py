@@ -4,9 +4,9 @@ L0 pins the closed-form geometry table (16:9 / 4:3 / 1:1 / 9:16 / 21:9 and a
 taller-than-9:16 case) plus even-dim/chroma rounding; L5 pins `clipper reframe`
 (reframe.json writing, post-MVP mode guard, bad-input errors); L3 renders a
 testsrc2 through the plan's crop/scale and the blur-pad contain/bars geometry
-and asserts exact 1080×1920 via ffprobe (the Sprint 9 filter graph is stubbed
-here with the same numbers the plan reports — the DoD's "L3 ffprobe check on
-rendered fixture").
+and asserts exact 1080×1920 via ffprobe (the Sprint 9 DoD's "L3 ffprobe
+check on rendered fixture" — rewired to the real `render.graph.build_video_chain`
+when Sprint 9 landed).
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ from scoria.reframe import (
     round_even,
     strategy_for,
 )
+from scoria.render.graph import build_video_chain
 from scoria.util.ffmpeg import run_ffmpeg
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -270,19 +271,22 @@ def _video_dimensions(path: Path) -> tuple[int, int]:
 
 
 def test_l3_crop_render_dims(tmp_path, landscape):
-    """16:9 640×360 → plan crop/scale → exact 1080×1920."""
+    """16:9 640×360 → plan crop/scale → exact 1080×1920 (real graph builder)."""
     plan = plan_for_dims(640, 360, _cfg())
     assert plan.strategy == "crop"
     assert plan.crop == CropRect(x=220, y=0, width=202, height=360)
     target = tmp_path / "crop_16x9.mp4"
+    fc, vf, label = build_video_chain(plan)
+    assert fc is None and label is None and vf is not None
     run_ffmpeg(
         [
             "-y",
             "-i",
             str(landscape),
             "-vf",
-            f"crop={plan.crop.width}:{plan.crop.height}:{plan.crop.x}:{plan.crop.y},"
-            f"scale={OUT[0]}:{OUT[1]}",
+            vf,
+            "-map",
+            "0:v:0",
             "-pix_fmt",
             "yuv420p",
             "-c:v",
@@ -305,22 +309,17 @@ def test_l3_blur_pad_render_dims(tmp_path, ultra_wide):
     assert plan.content == ContentDims(width=1080, height=456)
     assert plan.pad == PadBars(top=732, bottom=732, left=0, right=0)
     target = tmp_path / "blur_21x9.mp4"
-    # Sprint-9-shaped graph: blurred full-frame backdrop + contain overlay.
-    filter_complex = (
-        "split=2[bg][fg];"
-        f"[bg]scale={OUT[0]}:{OUT[1]},boxblur=20:4[bg2];"
-        f"[fg]scale={plan.content.width}:{plan.content.height}[fg2];"
-        f"[bg2][fg2]overlay={plan.pad.left}:{plan.pad.top}[vout]"
-    )
+    fc, vf, label = build_video_chain(plan)
+    assert fc is not None and vf is None and label == "[vout]"
     run_ffmpeg(
         [
             "-y",
             "-i",
             str(ultra_wide),
             "-filter_complex",
-            filter_complex,
+            fc,
             "-map",
-            "[vout]",
+            label,
             "-c:v",
             "libx264",
             "-preset",

@@ -20,13 +20,19 @@ import typer
 from rich.console import Console
 
 from scoria import envcheck
-from scoria.captions import CAPTION_VERSION, CAPTIONS_VERSION, build_captions, write_ass, write_srt
+from scoria.captions import (
+    CAPTION_VERSION,
+    CAPTIONS_VERSION,
+    build_captions,
+    write_caption_sidecars,
+)
 from scoria.config import build_config, default_config, dump_yaml
 from scoria.errors import PipelineError, ScoriaError
 from scoria.ingest import MediaInfo, analyze_video
 from scoria.project import normalize, read_json, write_json, write_manifest
 from scoria.rank import RANK_VERSION, rank_candidates
 from scoria.reframe import REFRAME_PLAN_VERSION, build_reframe_plan
+from scoria.render import RENDER_PLAN_VERSION, render_project
 from scoria.score import score_candidates
 from scoria.score.models import SCORED_CANDIDATES_VERSION
 from scoria.segment import CANDIDATES_VERSION, build_candidates
@@ -397,10 +403,74 @@ def rank(
         )
 
 
-@app.command(help="Render ranking.json → clips/ + captions/ (Sprint 9).")
+@app.command(help="Render ranking.json → clips/ (Sprint 9).")
 @_cmd
-def render(path: Path) -> None:
-    _not_implemented("render")
+def render(
+    path: Path = typer.Argument(..., help="ranking.json or a scoria project dir"),
+    output: Path | None = typer.Option(
+        None, "-o", "--output", help="Output root (default: ranking's dir)"
+    ),
+    config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
+    profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
+    captions_mode: str = typer.Option(
+        "on", "--captions", help="on|off: build/attach caption sidecars"
+    ),
+    rebuild_reframe: bool = typer.Option(
+        False, "--reframe", help="Rebuild reframe.json even if present"
+    ),
+    no_burn: bool = typer.Option(False, "--no-burn", help="Never burn subtitles into the video"),
+    crf: int | None = typer.Option(None, "--crf", help="x264 CRF override (0–51)"),
+    preset: str | None = typer.Option(None, "--preset", help="x264 preset override"),
+    force: bool = typer.Option(False, "--force", help="Re-render clips even if present"),
+    log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
+):
+    setup_logging(log_level)
+    if captions_mode not in ("on", "off"):
+        raise PipelineError(
+            f"invalid --captions value {captions_mode!r} (expected on|off)",
+            hint="pass --captions on to render with captions, --captions off to skip them",
+        )
+    if crf is not None and not 0 <= crf <= 51:
+        raise PipelineError(f"--crf must be in 0–51, got {crf}", hint="libx264 CRF range is 0–51")
+    cfg = build_config(path=config_path, profile=profile)
+    ranking_path = _ranking_json_path(path)
+    output_dir = (output or ranking_path.parent).resolve()
+    doc = render_project(
+        ranking_path,
+        cfg=cfg,
+        output_dir=output_dir,
+        captions_on=captions_mode == "on",
+        rebuild_reframe=rebuild_reframe,
+        no_burn=no_burn,
+        crf=crf,
+        preset=preset,
+        force=force,
+    )
+    rendered = sum(1 for clip in doc.clips if clip.status == "rendered")
+    logger.info(
+        "%d/%d clips rendered (burn=%s) -> %s",
+        rendered,
+        len(doc.clips),
+        doc.burn,
+        output_dir / "clips",
+        extra={"stage": "render", "artifact": str(output_dir / "render.json")},
+    )
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "clips": len(doc.clips),
+                    "rendered": rendered,
+                    "burn": doc.burn,
+                    "render_version": RENDER_PLAN_VERSION,
+                    "input": str(ranking_path),
+                    "output": str(output_dir),
+                    "degraded": doc.degraded,
+                },
+                sort_keys=True,
+            )
+        )
 
 
 @app.command(help="Write SRT + ASS sidecars from ranking.json (Sprint 7).")
@@ -442,18 +512,7 @@ def captions(
     doc = build_captions(ranking, analysis, cfg)
     out_dir = ranking_path.parent / "captions"
     write_json(out_dir / "captions.json", doc)
-    files: list[str] = []
-    for clip in doc.clips:
-        if not clip.captions:
-            continue
-        if "srt" in cfg.captions.format:
-            srt_path = out_dir / f"{clip.id}.srt"
-            srt_path.write_text(write_srt(clip.captions), encoding="utf-8")
-            files.append(str(srt_path))
-        if "ass" in cfg.captions.format:
-            ass_path = out_dir / f"{clip.id}.ass"
-            ass_path.write_text(write_ass(clip.captions, cfg.captions.ass_style), encoding="utf-8")
-            files.append(str(ass_path))
+    files = [str(path) for path in write_caption_sidecars(doc, out_dir, cfg)]
     total_captions = sum(len(clip.captions) for clip in doc.clips)
     logger.info(
         "%d clips -> %d caption blocks, %d sidecar file(s) -> %s",

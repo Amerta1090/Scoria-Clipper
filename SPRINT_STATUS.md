@@ -35,7 +35,7 @@ it at session end (same commit as the work or a `chore(status):` commit).
 | 6 | Ranking + diversity | **done** | greedy marginal-gain with overlap/sim/gap, `clipper rank`, ADR-017, this commit |
 | 7 | Captions | **done** | captions/ module: lines + SRT/ASS + \k karaoke + readability (ADR-018), `clipper captions`, this commit |
 | 8 | Vertical reframing | **done** | reframe/ module: AR→even-dim geometry, center crop + blur-pad, `clipper reframe`, L3 dims, this commit |
-| 9 | FFmpeg rendering | pending | filter graph, static gain, burn-in, atomic output |
+| 9 | FFmpeg rendering | **done** | render/ module: keyed-clip graph (build_video_chain/plan_for_dims/with_burn/escape_filter_path), `-f mp4` muxer pin, atomic `.part` → rename, deterministic keyed surface, `clipper render` (crf/preset/burn/no-burn/--force/--no-burn/-o/--project-dir), captions degradation, this commit |
 | 10 | Preview/report/explain | pending | thumbnails, contact sheet, report.html, explain renderers |
 | 11 | Integration hardening | pending | one-shot `run`, L4 determinism, degraded matrix, README, packaging |
 
