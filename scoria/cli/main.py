@@ -26,6 +26,7 @@ from scoria.errors import PipelineError, ScoriaError
 from scoria.ingest import MediaInfo, analyze_video
 from scoria.project import normalize, read_json, write_json, write_manifest
 from scoria.rank import RANK_VERSION, rank_candidates
+from scoria.reframe import REFRAME_PLAN_VERSION, build_reframe_plan
 from scoria.score import score_candidates
 from scoria.score.models import SCORED_CANDIDATES_VERSION
 from scoria.segment import CANDIDATES_VERSION, build_candidates
@@ -489,6 +490,66 @@ def _ranking_json_path(path: Path) -> Path:
             hint="run `clipper rank` first, then `clipper captions RANKING_DIR_OR_JSON`",
         )
     return path
+
+
+@app.command(help="Compute the 9:16 reframe plan (crop/blur-pad) from analysis.json (Sprint 8).")
+@_cmd
+def reframe(
+    path: Path = typer.Argument(..., help="analysis.json or a scoria project dir"),
+    config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
+    profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
+    log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
+):
+    setup_logging(log_level)
+    cfg = build_config(path=config_path, profile=profile)
+    if cfg.reframe.mode != "center":
+        raise PipelineError(
+            f"reframe mode '{cfg.reframe.mode}' is post-MVP (faces/target are roadmap); "
+            "MVP accepts only 'center'",
+            hint="set reframe.mode: center in the config (or drop --reframe)",
+        )
+    analysis_path = _analysis_json_path(path)
+    analysis = read_json(analysis_path)
+    if not isinstance(analysis, dict) or analysis.get("schema") != "analysis":
+        raise PipelineError(
+            f"not an analysis document (schema != 'analysis'): {analysis_path}",
+            hint="run `clipper analyze VID` first, then `clipper reframe <analysis.json>`",
+        )
+    media = analysis.get("media")
+    if not isinstance(media, dict) or media.get("schema") != "media-info":
+        raise PipelineError(
+            f"analysis has no media section: {analysis_path}",
+            hint="run `clipper analyze VID` with a video input (reframe needs width/height)",
+        )
+    plan = build_reframe_plan(MediaInfo(**media), cfg)
+    out_path = write_json(analysis_path.parent / "reframe.json", plan)
+    logger.info(
+        "%dx%d ar %.4f -> strategy %s -> %s",
+        plan.source.width,
+        plan.source.height,
+        plan.source.aspect_ratio,
+        plan.strategy,
+        out_path,
+        extra={"stage": "reframe", "artifact": str(out_path)},
+    )
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "strategy": plan.strategy,
+                    "source": normalize(plan.source),
+                    "target": normalize(plan.output),
+                    "crop": normalize(plan.crop),
+                    "content": normalize(plan.content),
+                    "pad": normalize(plan.pad),
+                    "reframe_version": REFRAME_PLAN_VERSION,
+                    "input": str(analysis_path),
+                    "output": str(out_path),
+                },
+                sort_keys=True,
+            )
+        )
 
 
 @app.command(help="Print the ScoreBreakdown for one clip (Sprint 10).")

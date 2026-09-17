@@ -4,20 +4,19 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 7 — Captions** (status: **done**, this commit).
-> Current sprint: **Sprint 8 — Vertical reframing** (status: pending).
-> Next action (Sprint 8): reframe — center crop + blur-pad geometry, even-dim rounding, 1080×1920 out
-> (`reframe/` module, geometry table tests; SPRINT_PLANNING.md §S8 + CONFIGURATION.md §1's `reframe` lens).
-> Sprint 7 landed: `captions/` module — `build_captions()` (ranking.json + analysis.json + config →
-> captions.json), `build_clip_captions()` pure line builder (window clamping, max_duration chunks, ≤ max_lines
-> lines ≤ chars_per_line, sentence-end reflow under `prefer_sentence_breaks`, min_word_count drop), pure
-> SRT/ASS writers with word-karaoke `\k` (CAPTIONS_SCHEMA "captions", CAPTIONS_VERSION 1, CAPTION_VERSION
-> words_lines.v1); **ADR-018** resolved OQ4 (readability rule adopted: `min = (chars_per_line·max_lines/5)/
-> (wpm/60)`, new `captions.wpm` default 200, `max_duration` default 4.5 → 5.1, config-load error exit 2);
-> `clipper captions` CLI (sidecars `captions/<clip>.srt|.ass` id-keyed + `captions/captions.json`; exit 1
-> missing ranking/transcript, exit 2 bad config); golden SRT/ASS strings + parse-back round-trip + karaoke==word
-> spans tests; fixture `config_good.yaml` updated to readability-valid values. 243 tests + 1 skip green (was
-> 214+1), captions/ at 100 % line coverage, ruff clean.
+> Last sprint: **Sprint 8 — Vertical reframing** (status: **done**, this commit).
+> Current sprint: **Sprint 9 — FFmpeg rendering** (status: pending).
+> Next action (Sprint 9): `render/` module — ffmpeg filter graph builder from ranking.json + reframe.json,
+> trim/crop/scale/subs/loudness/encode, atomic output (SPRINT_PLANNING.md §S9; reframe.json is the crop plan).
+> Sprint 8 landed: `reframe/` module — pure closed-form geometry: `plan_for_dims(source_w, source_h, cfg)` /
+> `build_reframe_plan(media, cfg)` → `ReframePlan` doc (schema "reframe", REFRAME_VERSION 1,
+> reframe_version "center.v1"); `strategy_for` scales/center-crops/blur-pads by AR (9:16 exact → scale;
+> 9:16 < ar ≤ `blurbad_threshold` → center crop; ar > threshold or ar < 9:16 → blur-pad); `compute_crop`
+> even-dim + even-offset center window (banker's ties-to-even), `compute_blur_pad` contain-dims + even bars;
+> `clipper reframe` writes `reframe.json` (post-MVP mode guard: faces/target → exit 1). Tests: 20 new —
+> geometry table (16:9, 4:3, 1:1, 9:16, 21:9, taller-than-9:16) exact, rounding rules, determinism, CLI
+> (write/json/guard/errors), two L3 ffprobe dims checks on rendered testsrc2 (crop path + blur-pad overlay).
+> 263 tests + 1 skip green (was 243+1), reframe/ at 100 % line coverage, ruff clean.
 
 ## Milestone
 
@@ -35,7 +34,7 @@ it at session end (same commit as the work or a `chore(status):` commit).
 | 5 | Scoring engine | **done** | score/ module + `clipper score`, golden totals pinned, this commit |
 | 6 | Ranking + diversity | **done** | greedy marginal-gain with overlap/sim/gap, `clipper rank`, ADR-017, this commit |
 | 7 | Captions | **done** | captions/ module: lines + SRT/ASS + \k karaoke + readability (ADR-018), `clipper captions`, this commit |
-| 8 | Vertical reframing | pending | center crop + blur-pad geometry |
+| 8 | Vertical reframing | **done** | reframe/ module: AR→even-dim geometry, center crop + blur-pad, `clipper reframe`, L3 dims, this commit |
 | 9 | FFmpeg rendering | pending | filter graph, static gain, burn-in, atomic output |
 | 10 | Preview/report/explain | pending | thumbnails, contact sheet, report.html, explain renderers |
 | 11 | Integration hardening | pending | one-shot `run`, L4 determinism, degraded matrix, README, packaging |
@@ -111,6 +110,21 @@ get a DECISIONS.md ADR.)_
   `(chars_per_line·max_lines/5)/(wpm/60)` with 5 chars ≈ 1 word and new `captions.wpm` (default 200);
   `max_duration` default 4.5 → 5.1. `tests/fixtures/config_good.yaml` bumped `max_duration` 4.5 → 5.0 to stay
   valid under its 40×2 chars (min 4.8).
+- Sprint 8: the plan is **video-wide** (one `reframe.json` for the whole source) — per-clip variation only
+  becomes possible with focus modes (`faces`/`target`, post-MVP). The post-MVP guard lives in the CLI
+  (`clipper reframe` exits 1 for non-center), not in `build_reframe_plan` (the interface accepts any mode).
+- Sprint 8: ARCHITECTURE.md §9 ("portrait narrower than 9:16 → blur-pad") and CONFIGURATION.md
+  (`blurbad_threshold: 1.78 → blur-pad for very-wide`) both hold — `strategy_for` blur-pads on **either**
+  side: ar < 9/16 (horizontal bars) or ar > threshold (vertical bars). 16:9 (1.7778) is the widest crop case.
+- Sprint 8: even-dim rounding uses **banker's ties-to-even** (`round_even(v) = 2·round(v/2)`): e.g. 607.5 →
+  608, 202.5 → 202, 219 → 220 offset. Center-crop offsets can never overflow the source by construction, so
+  only the width clamp (for out-of-contract inputs) is kept — the offset guard was provably dead and removed.
+- Sprint 8: the DoD's "L3 ffprobe check on rendered fixture" is stubbed: render (S9) owns the filter graph, so
+  the two L3 tests build a Sprint-9-shaped graph (crop→scale, and blur-pad contain+boxblur+overlay) from the
+  plan's own numbers and assert exact 1080×1920 via ffprobe. Rewire to the real graph builder when S9 lands.
+- Sprint 8: this ffmpeg (9.0.1) overlay filter rejects the `format=yuv420p` option (`Invalid argument`) — the
+  L3 blur-pad graph omits it (overlay defaults are yuv420p-compatible for these inputs); render (S9) must not
+  pass `format=yuv420p` to overlay on this build.
 
 ## Known risks / watch items
 

@@ -1,0 +1,43 @@
+"""Reframe: AR → 9:16 crop/blur-pad plan, pure closed-form geometry (Sprint 8).
+
+`build_reframe_plan` is the entry point: media (analysis.json) + config → the
+`reframe.json` document that `render/` (Sprint 9) turns into an ffmpeg filter
+graph. Center mode is deterministic by construction — no RNG, no smoothing
+(ARCHITECTURE.md §7/§9); post-MVP `faces`/`target` modes live behind the same
+interface.
+"""
+
+from scoria.reframe.core import (
+    REFRAME_PLAN_VERSION,
+    REFRAME_SCHEMA,
+    REFRAME_VERSION,
+    build_reframe_plan,
+    plan_for_dims,
+)
+from scoria.reframe.geometry import compute_blur_pad, compute_crop, round_even, strategy_for
+from scoria.reframe.models import (
+    ContentDims,
+    CropRect,
+    OutputGeometry,
+    PadBars,
+    ReframePlan,
+    SourceGeometry,
+)
+
+__all__ = [
+    "REFRAME_PLAN_VERSION",
+    "REFRAME_SCHEMA",
+    "REFRAME_VERSION",
+    "ContentDims",
+    "CropRect",
+    "OutputGeometry",
+    "PadBars",
+    "ReframePlan",
+    "SourceGeometry",
+    "build_reframe_plan",
+    "compute_blur_pad",
+    "compute_crop",
+    "plan_for_dims",
+    "round_even",
+    "strategy_for",
+]

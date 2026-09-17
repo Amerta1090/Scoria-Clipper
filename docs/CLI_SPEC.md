@@ -56,6 +56,13 @@ Writes SRT + ASS sidecars (`captions/<clip-id>.srt|.ass`, word-karaoke `\k`) plu
 (blocks + word timestamps); useful for editing before render. Exit 1 when ranking.json/transcript is missing,
 exit 2 on config error (readability rule, ADR-018).
 
+### `clipper reframe <analysis.json>`
+Computes the 9:16 reframe plan (crop / scale / blur-pad geometry, even-dim + chroma-aligned) from the
+`media` section and writes `reframe.json` (schema `reframe`, `reframe_version center.v1`); the render stage
+turns it into the ffmpeg filter graph. Deterministic by construction: the plan is a closed-form function of
+media dims + `reframe` config (Sprint 8). Exit 1 when the input isn't an analysis document, has no media
+section, or `reframe.mode` isn't `center` (faces/target are post-MVP); exit 2 on config error.
+
 ### `clipper explain <project|ranking.json> <clip-id> [--json]`
 Prints the full `ScoreBreakdown` for one clip and, when a ranking decision is available, the marginal-gain
 notes for both chosen and rejected candidates. `--json` dumps the raw breakdown (for scripting).
