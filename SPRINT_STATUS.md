@@ -4,22 +4,17 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 10 — Preview / report / explain** (status: **done**, this commit).
-> Current sprint: **Sprint 11 — Integration hardening** (status: pending).
-> Next action (Sprint 11): one-shot `clipper run` = analyze→…→report; L4 cross-stage determinism suite;
-> degraded-mode matrix; README quickstart; AUR-ready packaging metadata; CHANGELOG; doc cross-link check
-> (SPRINT_PLANNING.md §S11; PRD §8 criteria 1–7).
-> Sprint 10 landed: `report/` module — `graph.py` (pure `sample_times` / `thumbnail_args` /
-> `contact_sheet_args` (ffmpeg `hstack`) / `timeline_svg`), `html.py` (self-contained `report.html`, inline
-> CSS, no JS, base64-or-linked images, no timestamps → byte-stable), `explain.py` (embedded
-> `ScoreBreakdown` + ranking context; text/json/yaml renderers, `--json` alias), `core.py`
-> (`preview_project` → `previews/<id>.png` + `<id>.sheet.png` + `timeline.svg` + `previews.json`;
-> `report_project` adds `report.html`). `clipper report` / `preview` / `explain` are functional (one-shot
-> `run` stays Sprint 11). New `report.embed_images` (default true). ADR-019 recorded retroactively
-> (id-keyed artifacts) + ADR-020 (ffmpeg montage + SVG timeline, no ImageMagick). Tests: 35 new — L0 arg
-> surface/geometry/HTML, L5 CLI explain/report/preview + validation exits, L3 ffprobe dims (320×180 still,
-> 1600×180 sheet) and byte-stable re-run. 323 passed + 1 skip green, `report/` at 100 % line coverage,
-> ruff clean.
+> Last sprint: **Sprint 11 — Integration hardening** (status: **done**, this commit).
+> Current sprint: **none in progress** — Sprint 11 satisfies the M0 (MVP) criteria in PRD §8 (code-level; the
+> manual real-video cold-start check still needs a machine with whisper + STT, see Known risks).
+> Next action: pick up the next sprint from SPRINT_PLANNING.md / PRD backlog, or run the PRD §8 manual
+> cold-start on a whisper-capable machine (sample raw/ captures are already untracked in-repo).
+> Sprint 11 landed: one-shot `clipper run` (analyze→segment→score→rank→reframe→render→report) via the same
+> entry-point library code as the stage CLIs, `--json` full summary; demo/theme auto-detection + `--no-visual`,
+> `--no-transcript`, `--no-captions`, `--dry-run`; L4 cross-stage determinism suite (2 runs → byte-identical
+> JSON corpus + clip streams, project paths normalized to `<proj>`); degraded-mode matrix; README quickstart;
+> AUR-ready packaging metadata (MIT license + classifiers + project.urls); CHANGELOG.md; doc cross-link check.
+> 331 passed + 1 skip green, ruff check + format clean, wheel metadata valid.
 
 ## Milestone
 
@@ -40,7 +35,7 @@ it at session end (same commit as the work or a `chore(status):` commit).
 | 8 | Vertical reframing | **done** | reframe/ module: AR→even-dim geometry, center crop + blur-pad, `clipper reframe`, L3 dims, this commit |
 | 9 | FFmpeg rendering | **done** | render/ module: keyed-clip graph (build_video_chain/plan_for_dims/with_burn/escape_filter_path), `-f mp4` muxer pin, atomic `.part` → rename, deterministic keyed surface, `clipper render` (crf/preset/burn/no-burn/--force/--no-burn/-o/--project-dir), captions degradation, this commit |
 | 10 | Preview/report/explain | **done** | report/ module: stills + hstack contact sheets + SVG timeline + previews.json + report.html; explain text/json/yaml; `clipper report`/`preview`/`explain` (ADR-020), this commit |
-| 11 | Integration hardening | pending | one-shot `run`, L4 determinism, degraded matrix, README, packaging |
+| 11 | Integration hardening | **done** | one-shot `run` (full chain + `--json` summary), L4 cross-stage determinism in default suite, degraded-mode matrix, README quickstart, AUR-ready packaging metadata (MIT + classifiers + URLs), CHANGELOG, doc cross-link check, this commit |
 
 ## Control of work
 
@@ -140,6 +135,23 @@ get a DECISIONS.md ADR.)_
 - Sprint 10: `clipper explain` gains `--format text|json|yaml` on top of the CLI_SPEC-documented `--json`
   (shorthand for `--format json`); `--json` output is the raw embedded `ScoreBreakdown` plus the ranking
   context, so it is byte-identical to the candidate's `score` object.
+- Sprint 11: `clipper run` is one **command** wired end-to-end in `scoria/cli/main.py` — the chain is
+  analyze→segment→score→rank→reframe→render→report, calling the same library functions as the stage CLIs.
+  Render (S9) owns caption burning (captions are produced **inside** run when captions_on).
+- Sprint 11: L4 determinism (two full runs → byte-identical corpus) runs **in the default pytest suite** on
+  the archlinux CI job, not nightly — TESTING.md §L4 and §CI updated to match ("always (archlinux job)").
+- Sprint 11: artifacts store absolute paths (e.g. `render.json.output`, clip paths), so the L4 byte-compare
+  normalizes project-dir occurrences to `<proj>` (`_stable_hash` helper); determinism is asserted on the
+  normalized corpus + clip streams.
+- Sprint 11: `--no-vertical` exits **2 (UsageError)** — focus modes (faces/target) stay post-MVP, so the MVP
+  always renders 9:16 center reframe; `--no-vertical` is an explicit error, not a silent no-op.
+- Sprint 11: `--no-captions` sets `captions_on=False` at render time — **no** sidecar SRT/ASS and no burn
+  (previously CLI_SPEC claimed sidecars were still written; CLI_SPEC updated to match implementation).
+- Sprint 11: `--seed-stages` is **removed from CLI_SPEC** — it was never implemented; docs must describe only
+  real behavior.
+- Sprint 11: degraded-mode tests always run with `--no-transcript` — whisper.cpp is not installed on this
+  machine, so a bare `clipper run` exits 1 (missing STT) by design; the degradation path is contract-tested
+  via the flag matrix.
 
 ## Known risks / watch items
 
@@ -152,6 +164,10 @@ get a DECISIONS.md ADR.)_
   libass-shaped (V4+ styles, `Alignment 2` bottom-center, `margin_v` safe-area); render burns only when
   libass is present and otherwise degrades to sidecar-only with a logged warning + `burn_sidecar_only`
   in `render.json.degraded`.
+- **Resolved (Sprint 11):** a missing whisper binary (`transcript.binary` not found) makes `clipper run` exit
+  clear and non-zero via the transcript stage — degradation is **explicit flags only** (`--no-transcript`),
+  never a silent success; the L4 determinism guarantee is unaffected (byte-identical across runs by design,
+  PRD §8.1).
 - Real-video sanity runs (STT latency, real boundary/cut quality, PRD §8 cold-start) use untracked captures
   in `sample raw/` (git-ignored; e.g. a live-streaming gamer video) — manual, never CI (TESTING.md §2.1).
 
