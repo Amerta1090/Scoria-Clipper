@@ -173,6 +173,7 @@ report:
   preview_width: 320
   per_candidate_strips: 5     # contact sheet frames per clip
   include_score_table: true
+  embed_images: true          # base64 data URIs (self-contained report.html) vs previews/ links
 ```
 
 ## 2. Profiles

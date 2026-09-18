@@ -422,6 +422,7 @@ class ReportConfig(StrictModel):
     preview_width: int = Field(default=320, ge=1)
     per_candidate_strips: int = Field(default=5, ge=1)
     include_score_table: bool = True
+    embed_images: bool = True
 
 
 class ScoriaConfig(StrictModel):

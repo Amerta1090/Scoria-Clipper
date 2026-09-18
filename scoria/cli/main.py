@@ -3,10 +3,10 @@
 One-shot `clipper <video> [OPTIONS]` is handled by the entry wrapper in `main()`,
 which rewrites it into the `run` subcommand (CLI_SPEC.md §1); `run` shares the flag
 set with the top-level invocation. `analyze` (Sprint 1) is functional — it probes
-and validates the input and writes analysis.json + manifest.json. The remaining
-pipeline stage commands are registered stubs whose help matches CLI_SPEC.md;
-running them raises PipelineError (exit 1). `config` (Sprint 0) and `verify-env`
-are functional.
+and validates the input and writes analysis.json + manifest.json. Stage commands
+segment/score/rank/captions/reframe/render (Sprints 4–9) and explain/report/preview
+(Sprint 10) are functional; only the one-shot `run` stays a Sprint 11 skeleton.
+`config` (Sprint 0) and `verify-env` are functional.
 """
 
 from __future__ import annotations
@@ -27,12 +27,19 @@ from scoria.captions import (
     write_caption_sidecars,
 )
 from scoria.config import build_config, default_config, dump_yaml
-from scoria.errors import PipelineError, ScoriaError
+from scoria.errors import PipelineError, ScoriaError, UsageError
 from scoria.ingest import MediaInfo, analyze_video
 from scoria.project import normalize, read_json, write_json, write_manifest
 from scoria.rank import RANK_VERSION, rank_candidates
 from scoria.reframe import REFRAME_PLAN_VERSION, build_reframe_plan
 from scoria.render import RENDER_PLAN_VERSION, render_project
+from scoria.report import (
+    PREVIEW_VERSION,
+    explain_one,
+    preview_project,
+    render_explain,
+    report_project,
+)
 from scoria.score import score_candidates
 from scoria.score.models import SCORED_CANDIDATES_VERSION
 from scoria.segment import CANDIDATES_VERSION, build_candidates
@@ -613,20 +620,91 @@ def reframe(
 
 @app.command(help="Print the ScoreBreakdown for one clip (Sprint 10).")
 @_cmd
-def explain(path: Path, clip_id: str) -> None:
-    _not_implemented("explain")
+def explain(
+    path: Path = typer.Argument(..., help="ranking.json or a scoria project dir"),
+    clip_id: str = typer.Argument(..., help="Clip id, e.g. c0006"),
+    out_format: str = typer.Option("text", "--format", help="text|json|yaml"),
+    json_output: bool = typer.Option(
+        False, "--json", help="Raw breakdown JSON (alias for --format json)"
+    ),
+):
+    if json_output:
+        out_format = "json"
+    if out_format not in ("text", "json", "yaml"):
+        raise UsageError(
+            f"invalid --format {out_format!r} (expected text|json|yaml)",
+            hint="pass --format text|json|yaml; --json is shorthand for json",
+        )
+    ranking_path = _ranking_json_path(path)
+    ranking = read_json(ranking_path)
+    if not isinstance(ranking, dict) or ranking.get("schema") != "ranking":
+        raise PipelineError(
+            f"not a ranking document (schema != 'ranking'): {ranking_path}",
+            hint="run `clipper rank <candidates.json>` first",
+        )
+    candidates_path = ranking_path.parent / "candidates.json"
+    if not candidates_path.is_file():
+        raise PipelineError(
+            "explain needs the sibling candidates.json (embedded ScoreBreakdown)",
+            hint=f"expected {candidates_path} next to {ranking_path}",
+        )
+    candidates = read_json(candidates_path)
+    typer.echo(render_explain(explain_one(ranking, candidates, clip_id), out_format), nl=False)
 
 
 @app.command(help="Write previews + report.html from existing JSON (Sprint 10).")
 @_cmd
-def report(path: Path) -> None:
-    _not_implemented("report")
+def report(
+    path: Path = typer.Argument(..., help="analysis.json or a scoria project dir"),
+    config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
+    profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
+    log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
+):
+    setup_logging(log_level)
+    cfg = build_config(path=config_path, profile=profile)
+    analysis_path = _analysis_json_path(path)
+    html_path = report_project(analysis_path, cfg=cfg)
+    previews = read_json(analysis_path.parent / "previews" / "previews.json")
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "clips": len(previews.get("clips", [])),
+                    "preview_version": previews.get("preview_version", PREVIEW_VERSION),
+                    "input": str(analysis_path),
+                    "output": str(html_path),
+                },
+                sort_keys=True,
+            )
+        )
 
 
 @app.command(help="Alias for report — previews + timeline strip only (Sprint 10).")
 @_cmd
-def preview(path: Path) -> None:
-    _not_implemented("preview")
+def preview(
+    path: Path = typer.Argument(..., help="analysis.json or a scoria project dir"),
+    config_path: Path | None = typer.Option(None, "-c", "--config", help="YAML config file"),
+    profile: str | None = typer.Option(None, "-p", "--profile", help="Config profile"),
+    log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
+    json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
+):
+    setup_logging(log_level)
+    cfg = build_config(path=config_path, profile=profile)
+    analysis_path = _analysis_json_path(path)
+    doc = preview_project(analysis_path, cfg=cfg)
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "clips": len(doc.clips),
+                    "preview_version": doc.preview_version,
+                    "input": str(analysis_path),
+                    "output": str(analysis_path.parent / "previews"),
+                },
+                sort_keys=True,
+            )
+        )
 
 
 @app.command(help="Download + verify the Whisper model (one-time network op).")

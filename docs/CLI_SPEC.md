@@ -63,15 +63,19 @@ turns it into the ffmpeg filter graph. Deterministic by construction: the plan i
 media dims + `reframe` config (Sprint 8). Exit 1 when the input isn't an analysis document, has no media
 section, or `reframe.mode` isn't `center` (faces/target are post-MVP); exit 2 on config error.
 
-### `clipper explain <project|ranking.json> <clip-id> [--json]`
+### `clipper explain <project|ranking.json> <clip-id> [--format text|json|yaml] [--json]`
 Prints the full `ScoreBreakdown` for one clip and, when a ranking decision is available, the marginal-gain
-notes for both chosen and rejected candidates. `--json` dumps the raw breakdown (for scripting).
+notes for both chosen and rejected candidates. `--json` is shorthand for `--format json` and dumps the raw
+breakdown (byte-identical to the candidate's embedded `score`); `--format yaml` emits the same document as
+YAML. Reads the sibling `candidates.json` for the embedded breakdown — no analysis rerun.
 
 ### `clipper report <project|analysis.json>`
-Writes `previews/` thumbnails + contact sheets + `report.html` from existing JSON artifacts (no analysis).
+Writes `previews/` (id-keyed `<clip>.png` still at the clip mid, `<clip>.sheet.png` contact sheet,
+`timeline.svg`) + `previews.json` + a self-contained `report.html` from existing JSON artifacts (no
+analysis). Clip timings come from `ranking.json`; images embed as base64 unless `report.embed_images: false`.
 
 ### `clipper preview <project|analysis.json>`
-Alias for `report` limited to preview assets + timeline strip (no full HTML).
+Alias for `report` limited to preview assets + timeline strip (no `report.html`).
 
 ### `clipper config`
 - `clipper config show` — active config (default+profile+CLI merged) as YAML.

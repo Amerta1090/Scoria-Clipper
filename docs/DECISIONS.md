@@ -126,6 +126,18 @@ decisions are superseded, never edited retroactively.
   ASS `\k` karaoke equals word spans and render (S9) can burn without re-reading analysis.
 - Status: **Accepted (Sprint 7).**
 
+## ADR-019 — Id-keyed artifact naming for clips/captions/previews (retroactive)
+- **Context:** Sprint 7 sketched `clip-01.srt/.ass` names in ARCHITECTURE.md §6, but clip `id` (`c0001`-shaped) is the rank-independent identity: rank changes with `--top`/config, ids do not. Sprint 7 shipped id-keyed caption sidecars (`captions/c0006.srt`) and Sprint 9 rendered `clips/<clip_id>.mp4` (`render/core.py` cites "ADR-019") — but the decision was never recorded in this log.
+- **Decision:** Every per-clip artifact is keyed by the stable candidate `id`, not rank or position: `clips/<id>.mp4`, `captions/<id>.srt|.ass`, `previews/<id>.png|.sheet.png`. Rank/order mapping lives inside the JSON documents (`ranking.json.selected[].rank`, `captions.json`), never in filenames; rank-dependent naming is reserved for human-facing presentation only.
+- **Consequences:** Artifacts survive re-ranking and are directly addressable by id across stages (`clipper explain proj <id>`); scripts join on id without parsing filenames. ARCHITECTURE.md §6/§11 were updated in Sprints 7/9; this entry records the decision retroactively so later sprints have a citable source.
+- Status: **Accepted (Sprint 7 / Sprint 9; recorded Sprint 10).**
+
+## ADR-020 — Report assets: ffmpeg montage + SVG timeline + PNG stills (no ImageMagick); `report.embed_images`
+- **Context:** SPRINT_PLANNING.md §S10 sketched "contact sheets (ImageMagick if present)" and "images embedded base64 or as links (config/webfont-free default)". ImageMagick is not in the evaluated stack (DEPENDENCIES.md), and an "if present" branch would make report output depend on the host — breaking the determinism contract (ADR-010).
+- **Decision:** (1) Contact sheets are one-row `hstack` montages built by the already-required ffmpeg (`report/graph.py:contact_sheet_args`), not ImageMagick — no new runtime dependency, no host-dependent branch. (2) Stills are lossless PNG grabbed through the pinned ffmpeg surface with `-ss` input seek (same frame-time surface as render). (3) The timeline strip is deterministic SVG (pure string builder, no ffmpeg), embedded inline in `report.html` and written as `previews/timeline.svg`. (4) `report.html` carries no timestamps, so it is byte-stable. (5) New `report.embed_images` (default `true`) selects base64 data URIs (single self-contained file) vs relative `previews/` links; `report.preview_width` / `per_candidate_strips` / `include_score_table` were already schema keys.
+- **Consequences:** `report`/`preview` are reproducible on any machine with ffmpeg (no optional tool); L0 tests pin the arg surface without ImageMagick, and L3 ffprobe checks assert exact still dims (`preview_width` × even height; sheet = N × preview width). `previews.json` (`schema: previews`, PREVIEWS_VERSION 1, `preview_version: still.mid.v1`) joins `ranking.json` by clip id (ADR-019).
+- Status: **Accepted (Sprint 10).**
+
 ---
 
 ## Open questions

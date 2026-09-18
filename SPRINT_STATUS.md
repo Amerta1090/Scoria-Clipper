@@ -4,19 +4,22 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 8 — Vertical reframing** (status: **done**, this commit).
-> Current sprint: **Sprint 9 — FFmpeg rendering** (status: pending).
-> Next action (Sprint 9): `render/` module — ffmpeg filter graph builder from ranking.json + reframe.json,
-> trim/crop/scale/subs/loudness/encode, atomic output (SPRINT_PLANNING.md §S9; reframe.json is the crop plan).
-> Sprint 8 landed: `reframe/` module — pure closed-form geometry: `plan_for_dims(source_w, source_h, cfg)` /
-> `build_reframe_plan(media, cfg)` → `ReframePlan` doc (schema "reframe", REFRAME_VERSION 1,
-> reframe_version "center.v1"); `strategy_for` scales/center-crops/blur-pads by AR (9:16 exact → scale;
-> 9:16 < ar ≤ `blurbad_threshold` → center crop; ar > threshold or ar < 9:16 → blur-pad); `compute_crop`
-> even-dim + even-offset center window (banker's ties-to-even), `compute_blur_pad` contain-dims + even bars;
-> `clipper reframe` writes `reframe.json` (post-MVP mode guard: faces/target → exit 1). Tests: 20 new —
-> geometry table (16:9, 4:3, 1:1, 9:16, 21:9, taller-than-9:16) exact, rounding rules, determinism, CLI
-> (write/json/guard/errors), two L3 ffprobe dims checks on rendered testsrc2 (crop path + blur-pad overlay).
-> 263 tests + 1 skip green (was 243+1), reframe/ at 100 % line coverage, ruff clean.
+> Last sprint: **Sprint 10 — Preview / report / explain** (status: **done**, this commit).
+> Current sprint: **Sprint 11 — Integration hardening** (status: pending).
+> Next action (Sprint 11): one-shot `clipper run` = analyze→…→report; L4 cross-stage determinism suite;
+> degraded-mode matrix; README quickstart; AUR-ready packaging metadata; CHANGELOG; doc cross-link check
+> (SPRINT_PLANNING.md §S11; PRD §8 criteria 1–7).
+> Sprint 10 landed: `report/` module — `graph.py` (pure `sample_times` / `thumbnail_args` /
+> `contact_sheet_args` (ffmpeg `hstack`) / `timeline_svg`), `html.py` (self-contained `report.html`, inline
+> CSS, no JS, base64-or-linked images, no timestamps → byte-stable), `explain.py` (embedded
+> `ScoreBreakdown` + ranking context; text/json/yaml renderers, `--json` alias), `core.py`
+> (`preview_project` → `previews/<id>.png` + `<id>.sheet.png` + `timeline.svg` + `previews.json`;
+> `report_project` adds `report.html`). `clipper report` / `preview` / `explain` are functional (one-shot
+> `run` stays Sprint 11). New `report.embed_images` (default true). ADR-019 recorded retroactively
+> (id-keyed artifacts) + ADR-020 (ffmpeg montage + SVG timeline, no ImageMagick). Tests: 35 new — L0 arg
+> surface/geometry/HTML, L5 CLI explain/report/preview + validation exits, L3 ffprobe dims (320×180 still,
+> 1600×180 sheet) and byte-stable re-run. 323 passed + 1 skip green, `report/` at 100 % line coverage,
+> ruff clean.
 
 ## Milestone
 
@@ -36,7 +39,7 @@ it at session end (same commit as the work or a `chore(status):` commit).
 | 7 | Captions | **done** | captions/ module: lines + SRT/ASS + \k karaoke + readability (ADR-018), `clipper captions`, this commit |
 | 8 | Vertical reframing | **done** | reframe/ module: AR→even-dim geometry, center crop + blur-pad, `clipper reframe`, L3 dims, this commit |
 | 9 | FFmpeg rendering | **done** | render/ module: keyed-clip graph (build_video_chain/plan_for_dims/with_burn/escape_filter_path), `-f mp4` muxer pin, atomic `.part` → rename, deterministic keyed surface, `clipper render` (crf/preset/burn/no-burn/--force/--no-burn/-o/--project-dir), captions degradation, this commit |
-| 10 | Preview/report/explain | pending | thumbnails, contact sheet, report.html, explain renderers |
+| 10 | Preview/report/explain | **done** | report/ module: stills + hstack contact sheets + SVG timeline + previews.json + report.html; explain text/json/yaml; `clipper report`/`preview`/`explain` (ADR-020), this commit |
 | 11 | Integration hardening | pending | one-shot `run`, L4 determinism, degraded matrix, README, packaging |
 
 ## Control of work
@@ -122,9 +125,21 @@ get a DECISIONS.md ADR.)_
 - Sprint 8: the DoD's "L3 ffprobe check on rendered fixture" is stubbed: render (S9) owns the filter graph, so
   the two L3 tests build a Sprint-9-shaped graph (crop→scale, and blur-pad contain+boxblur+overlay) from the
   plan's own numbers and assert exact 1080×1920 via ffprobe. Rewire to the real graph builder when S9 lands.
+  **Resolved Sprint 10: the two L3 tests now import `render.graph.build_video_chain`; the stub is gone.**
 - Sprint 8: this ffmpeg (9.0.1) overlay filter rejects the `format=yuv420p` option (`Invalid argument`) — the
   L3 blur-pad graph omits it (overlay defaults are yuv420p-compatible for these inputs); render (S9) must not
   pass `format=yuv420p` to overlay on this build.
+- Sprint 10: contact sheets are ffmpeg `hstack` montages, not "ImageMagick if present" (SPRINT_PLANNING.md
+  §S10) — ImageMagick is not in the evaluated stack and an "if present" branch would make report output
+  host-dependent (ADR-020). Stills are lossless PNG; the timeline strip is deterministic SVG.
+- Sprint 10: `report.html` emits no timestamps (byte-stable for the same inputs, ADR-010); the timeline SVG
+  is embedded inline, and images are base64 `data:` URIs unless `report.embed_images: false`.
+- Sprint 10: `report`/`preview` require the sibling `ranking.json` (selected clips drive the stills) and
+  never re-analyze; `explain` requires the sibling `candidates.json` for the embedded breakdown. A preview of
+  analysis alone is out of scope.
+- Sprint 10: `clipper explain` gains `--format text|json|yaml` on top of the CLI_SPEC-documented `--json`
+  (shorthand for `--format json`); `--json` output is the raw embedded `ScoreBreakdown` plus the ranking
+  context, so it is byte-identical to the candidate's `score` object.
 
 ## Known risks / watch items
 
@@ -133,9 +148,10 @@ get a DECISIONS.md ADR.)_
 - **Resolved (Sprint 1):** ffprobe n9.0.1 JSON probing verified on generated 16:9 / 9:16 / 4:3 / audio-only
   fixtures; duration/AR/timebase exact; VFR `avg_frame_rate` (e.g. `0/0`) recorded raw, timestamps normalized
   to seconds. Confirmed ffprobe builds diverge on CLI flags (`-nostdin` rejected) → see drift note.
-- Sprint 8+ watch: ASS burn-in needs libass (`subtitles` filter) at render time — captions are already
-  libass-shaped (V4+ styles, `Alignment 2` bottom-center, `margin_v` safe-area), and burn must degrade
-  gracefully to sidecar-only when libass is missing (Sprint 9 degraded path).
+- **Resolved (Sprint 9):** ASS burn-in needs libass (`subtitles` filter) at render time — captions are
+  libass-shaped (V4+ styles, `Alignment 2` bottom-center, `margin_v` safe-area); render burns only when
+  libass is present and otherwise degrades to sidecar-only with a logged warning + `burn_sidecar_only`
+  in `render.json.degraded`.
 - Real-video sanity runs (STT latency, real boundary/cut quality, PRD §8 cold-start) use untracked captures
   in `sample raw/` (git-ignored; e.g. a live-streaming gamer video) — manual, never CI (TESTING.md §2.1).
 
