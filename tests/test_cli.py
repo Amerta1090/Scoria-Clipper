@@ -40,10 +40,16 @@ def test_no_args_shows_help():
     assert "Commands" in proc.stdout
 
 
-def test_one_shot_run_stub_exits_one():
+def test_run_missing_input_exits_one():
     result = runner.invoke(app, ["run", "video.mp4", "--top", "3"])
     assert result.exit_code == 1
-    assert "not implemented" in result.output
+    assert "input not found" in result.output.lower()
+
+
+def test_run_no_vertical_exits_two():
+    result = runner.invoke(app, ["run", "video.mp4", "--no-vertical"])
+    assert result.exit_code == 2
+    assert "post-mvp" in _output(result).lower()
 
 
 def test_analyze_missing_input_exits_one():
@@ -118,7 +124,7 @@ def test_entry_wrapper_rewrites_one_shot():
         timeout=60,
     )
     assert proc.returncode == 1
-    assert "not implemented" in proc.stderr
+    assert "input not found" in proc.stderr.lower()
 
 
 def test_entry_passthrough_verify_env():

@@ -10,8 +10,10 @@ Binary: `clipper` (installed via `uv tool install scoria` or `pipx`). All subcom
 ## 1. Commands
 
 ### `clipper <video> [OPTIONS]` (alias `clipper run`)
-One-shot: `analyze` → `segment` → `score` → `rank` → `captions` → `render` → `report`.
-Shortcut for the explicit pipeline; never a different code path that could drift from the steps.
+One-shot: `analyze` → `segment` → `score` → `rank` → `reframe` → `render` → `report`.
+Shortcut for the explicit pipeline; never a different code path that could drift from the steps
+(`run` calls the same library entry points as the stage commands). Caption sidecars are built by the
+render step (`captions/`), previews + `report.html` by the report step.
 
 ```
 Options:
@@ -21,10 +23,10 @@ Options:
   -t, --top <n>            number of clips to render (default 3)
   --no-transcript          skip STT (audio-only scoring fallback)
   --no-visual              skip frame pass
-  --no-captions            skip caption burn-in (sidecar files still written)
-  --vertical / --no-vertical   force 9:16 output (default: vertical)
-  --reframe center|faces   (faces = post-MVP; MVP accepts only center)
-  --seed-stages analyze    stop after analysis (see per-stage flags)
+  --no-captions            skip captions entirely (no sidecars, no burn)
+  --vertical / --no-vertical   force 9:16 output (default: vertical; --no-vertical is
+                           post-MVP and exits 2 — MVP output is always center-reframed 9:16)
+  --reframe center         (faces/target = post-MVP; MVP accepts only center)
   --keep-temp              do not delete analysis temporaries
   --overwrite              overwrite existing project dir
   --log-level <level>      debug|info|warning|error (default info)
@@ -99,7 +101,7 @@ clipper recording.mp4 --top 5 -p podcast               # podcast weights
 clipper analyze recording.mp4 -o proj                  # inspect, tune config, then:
 clipper score  proj/candidates.json -c tuned.yaml
 clipper rank   proj/candidates.json -c tuned.yaml --top 5
-clipper explain proj clip-03
+clipper explain proj c0001
 clipper render proj/ranking.json -o proj/clips
 clipper report proj
 ```
@@ -109,8 +111,8 @@ clipper report proj
 - `clipper analyze -` reads media from stdin (ffprobe/ffmpeg support pipes); project dir still required.
 - All stage commands accept `--json` summaries sized for `jq`:
   `clipper rank proj/candidates.json --top 5 --json | jq '.clips[].id'`.
-- Namespace rules: `clip-NN` ids are stable across runs for the same analysis.json (deterministic ordering),
-  so scripts can reference ids across invocations.
+- Namespace rules: `cNNNN` ids (candidate ids, e.g. `c0001`) are stable across runs for the same
+  analysis.json (deterministic ordering), so scripts can reference ids across invocations.
 
 ## 4. Error behavior
 

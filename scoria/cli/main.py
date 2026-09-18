@@ -2,10 +2,12 @@
 
 One-shot `clipper <video> [OPTIONS]` is handled by the entry wrapper in `main()`,
 which rewrites it into the `run` subcommand (CLI_SPEC.md §1); `run` shares the flag
-set with the top-level invocation. `analyze` (Sprint 1) is functional — it probes
-and validates the input and writes analysis.json + manifest.json. Stage commands
+set with the top-level invocation. All stages are functional: `analyze` (Sprint 1)
+probes and validates the input and writes analysis.json + manifest.json;
 segment/score/rank/captions/reframe/render (Sprints 4–9) and explain/report/preview
-(Sprint 10) are functional; only the one-shot `run` stays a Sprint 11 skeleton.
+(Sprint 10) are per-stage commands; the one-shot `run` (Sprint 11) drives
+analyze → segment → score → rank → reframe → render → report through the same
+library entry points as the steps, so the shortcut can never drift from them.
 `config` (Sprint 0) and `verify-env` are functional.
 """
 
@@ -80,13 +82,6 @@ config_group = typer.Typer(help="Inspect and validate configuration.")
 app.add_typer(config_group, name="config")
 
 
-def _not_implemented(stage: str) -> None:
-    raise PipelineError(
-        f"`clipper {stage}` is not implemented yet (Sprints 1–11); "
-        "this is the Sprint 0 foundation skeleton"
-    )
-
-
 def encode_summary(media: MediaInfo, analysis_path: Path) -> dict:
     """`--json` stage summary under the serialization contract (rounded floats)."""
     analysis = read_json(analysis_path)
@@ -102,38 +97,132 @@ def encode_summary(media: MediaInfo, analysis_path: Path) -> dict:
 def _cli_overrides(
     output: Path | None,
     no_transcript: bool,
+    no_visual: bool,
     no_captions: bool,
-    vertical: bool,
     reframe_mode: str | None,
     keep_temp: bool,
     overwrite: bool,
 ) -> dict:
+    """Mechanical CLI-flag → config mapping (CLI_SPEC §1): defaults < profile < CLI, last wins."""
     overrides: dict = {"project": {"keep_temp": keep_temp, "overwrite": overwrite}}
     if output is not None:
         overrides["project"]["dir"] = str(output)
     if no_transcript:
         overrides["transcript"] = {"enabled": False}
+    if no_visual:
+        overrides["visual"] = {"enabled": False}
+    if no_captions:
+        overrides["captions"] = {"enabled": False}
     if reframe_mode is not None:
         overrides["reframe"] = {"mode": reframe_mode}
     return overrides
 
 
 def _run_pipeline(
+    video: str,
     config_path: Path | None,
     profile: str | None,
     output: Path | None,
+    top: int,
     no_transcript: bool,
+    no_visual: bool,
     no_captions: bool,
     vertical: bool,
     reframe_mode: str | None,
     keep_temp: bool,
     overwrite: bool,
-) -> None:
+) -> dict:
+    """One-shot run: analyze → segment → score → rank → reframe → render → report.
+
+    Calls the same library entry points as the per-stage commands (no parallel
+    code path), so `run` can never drift from the explicit pipeline. Returns the
+    `--json` summary dict (floats under the serialization contract).
+    """
+    if not vertical:
+        raise UsageError(
+            "--no-vertical is post-MVP; MVP one-shot output is always 9:16 via center reframe",
+            hint="omit --no-vertical (faces/target reframe modes land post-MVP)",
+        )
     overrides = _cli_overrides(
-        output, no_transcript, no_captions, vertical, reframe_mode, keep_temp, overwrite
+        output, no_transcript, no_visual, no_captions, reframe_mode, keep_temp, overwrite
     )
-    build_config(path=config_path, profile=profile, overrides=overrides)
-    _not_implemented("run")
+    cfg = build_config(path=config_path, profile=profile, overrides=overrides)
+    project_dir = Path(cfg.project.dir)
+
+    # analyze — the only stage that touches the media; writes analysis.json + manifest.json
+    _, project_dir, degraded = analyze_video(video, cfg)
+    tools = {name: ffmpeg.version(name) for name in ("ffmpeg", "ffprobe")}
+    if cfg.transcript.enabled:
+        tools["whisper-cli"] = whisper_cli_info(cfg.transcript)
+        tools["whisper-model"] = whisper_model_info(cfg.transcript)
+    write_manifest(project_dir, config=cfg, tools=tools, invocation=sys.argv, degraded=degraded)
+    analysis_path = project_dir / "analysis.json"
+
+    # segment
+    analysis = read_json(analysis_path)
+    candidates = build_candidates(analysis, cfg)
+    candidates_path = project_dir / "candidates.json"
+    write_json(candidates_path, candidates)
+
+    # score (first pass needs the fresh analysis for feature building)
+    candidates = score_candidates(candidates, cfg, analysis_data=analysis)
+    write_json(candidates_path, candidates)
+
+    # rank
+    ranking = rank_candidates(candidates, cfg, top=top)
+    ranking_path = project_dir / "ranking.json"
+    write_json(ranking_path, ranking)
+
+    # reframe (MVP: center 9:16 only)
+    if cfg.reframe.mode != "center":
+        raise PipelineError(
+            f"reframe mode '{cfg.reframe.mode}' is post-MVP (faces/target are roadmap); "
+            "MVP accepts only 'center'",
+            hint="set reframe.mode: center in the config (or drop --reframe)",
+        )
+    media_section = analysis.get("media")
+    if not isinstance(media_section, dict) or media_section.get("schema") != "media-info":
+        raise PipelineError(
+            f"analysis has no media section: {analysis_path}",
+            hint="run `clipper analyze VID` with a video input (reframe needs width/height)",
+        )
+    plan = build_reframe_plan(MediaInfo(**media_section), cfg)
+    write_json(project_dir / "reframe.json", plan)
+
+    # render (+ caption sidecars via render internals) — writes render.json + manifest.json
+    doc = render_project(
+        ranking_path,
+        cfg=cfg,
+        output_dir=project_dir,
+        captions_on=not no_captions,
+    )
+    rendered = sum(1 for clip in doc.clips if clip.status == "rendered")
+
+    # report — previews/ + report.html from existing artifacts (no re-analysis)
+    html_path = report_project(analysis_path, cfg=cfg)
+
+    degraded_all = list(dict.fromkeys([*degraded, *doc.degraded]))
+    logger.info(
+        "one-shot run complete: %d/%d clips rendered -> %s (report=%s, degraded=%s)",
+        rendered,
+        len(doc.clips),
+        project_dir / "clips",
+        html_path,
+        degraded_all or "-",
+        extra={"stage": "run", "artifact": str(html_path)},
+    )
+    return {
+        "ok": True,
+        "project": str(project_dir),
+        "analysis": str(analysis_path),
+        "candidates": len(candidates["candidates"]),
+        "selected": len(ranking["selected"]),
+        "rendered": rendered,
+        "burn": doc.burn,
+        "clips": str(project_dir / "clips"),
+        "report": str(html_path),
+        "degraded": degraded_all,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +230,7 @@ def _run_pipeline(
 # ---------------------------------------------------------------------------
 
 
-@app.command(help="One-shot: analyze → segment → score → rank → captions → render → report.")
+@app.command(help="One-shot: analyze → segment → score → rank → reframe → render → report.")
 def run(
     video: Path = typer.Argument(..., help="Input video (or '-' for stdin)"),
     output: Path | None = typer.Option(
@@ -161,12 +250,15 @@ def run(
     json_output: bool = typer.Option(False, "--json", help="Machine-readable summary"),
 ):
     setup_logging(log_level)
-    _handle_error(
+    summary = _handle_error(
         lambda: _run_pipeline(
+            str(video),
             config_path,
             profile,
             output,
+            top,
             no_transcript,
+            no_visual,
             no_captions,
             vertical,
             reframe_mode,
@@ -175,7 +267,7 @@ def run(
         )
     )()
     if json_output:
-        typer.echo(json.dumps({"ok": True}, sort_keys=True))
+        typer.echo(json.dumps(summary, sort_keys=True, ensure_ascii=False))
 
 
 # ---------------------------------------------------------------------------
