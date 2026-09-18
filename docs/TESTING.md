@@ -78,6 +78,13 @@ clip twice and asserts identical sha256 (stream-level). If an encoder genuinely 
 marked non-deterministic in `manifest.json` and the test *documents* rather than fails — the JSON contract is
 never allowed to break.
 
+L4 variants (Sprint 12/13):
+- **Gamer profile** (`--profile gaming`): full two-zone run twice → byte-identical corpus + clip streams;
+  default center run stays the regression baseline.
+- **Captions-on** (`transcript.enabled: true` + `transcript.path` → aligned golden fixture, no whisper
+  binary): same two-run byte-identical corpus incl. SRT/ASS sidecars; `render.json.burn=True` when libass
+  is present (burn-smoke: burned bytes ≠ bare-clip bytes), else `burn_sidecar_only` — still deterministic.
+
 ## 5. Degraded-mode tests
 
 - STT off (`--no-transcript`): scoring renormalizes (sum ≈ 1), candidates from silence+scene only, no

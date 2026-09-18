@@ -138,6 +138,23 @@ decisions are superseded, never edited retroactively.
 - **Consequences:** `report`/`preview` are reproducible on any machine with ffmpeg (no optional tool); L0 tests pin the arg surface without ImageMagick, and L3 ffprobe checks assert exact still dims (`preview_width` × even height; sheet = N × preview width). `previews.json` (`schema: previews`, PREVIEWS_VERSION 1, `preview_version: still.mid.v1`) joins `ranking.json` by clip id (ADR-019).
 - Status: **Accepted (Sprint 10).**
 
+## ADR-021 — `transcript.path`: load a saved transcript-info document instead of running whisper.cpp
+- **Context:** Sprint 13 needs captions to *actually render* in clips, but whisper.cpp is not installed on
+  the authoring machine and cannot be installed offline/CI — `transcript.enabled: false` degraded every run
+  (`degraded=['transcript','captions_unavailable']`), so the whole captions-on chain (scoring transcript
+  terms, SRT/ASS, burn) was untestable without STT.
+- **Decision:** (1) New `transcript.path: ""` config key — when set (with `transcript.enabled: true`) the
+  transcript stage **loads + contract-validates** a saved `transcript-info` document (schema match,
+  non-empty `words`, strictly monotonic timestamps) instead of running whisper.cpp. (2) Broken docs are a
+  hard error (exit 1), never silent. (3) `manifest.json` stamps `transcript_source: file|whisper.cpp` so a
+  run's transcript provenance is inspectable. (4) Whisper.cpp stays the default runtime engine; this is an
+  addition, not an overturn of ADR-004/ADR-014. (5) Given identical words, file-ingest and whisper produce
+  the identical `analysis.json.transcript` (same normalization + sentence grouping), extending
+  byte-reproducibility to the captions chain without an STT binary.
+- **Consequences:** offline/CI runs prove captions correctness against an aligned golden fixture; the sample
+  workflow gets a documented offline demo path if the AUR whisper install is unavailable (no network).
+- Status: **Accepted (Sprint 13).**
+
 ---
 
 ## Open questions

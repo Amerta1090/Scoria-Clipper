@@ -10,6 +10,10 @@ Deterministic, local-first video clipping engine. CLI binary `clipper`, Python p
 Target: Arch Linux, x86_64, CLI-first, offline.
 
 - One command: `clipper video.mp4 --top 3` → ranked 9:16 vertical clips with burned captions.
+- Two cut modes: `clipper run X` → 9:16 center crop (default); `clipper run X --profile gaming`
+  → two-zone "gamer" layout (gameplay top + facecam bottom), same closed-form determinism.
+- Captions need a transcript: real STT via whisper.cpp, or `transcript.path` (saved
+  transcript-info JSON) for offline/deterministic runs — burn is byte-reproducible both ways.
 - Stack: ffmpeg/ffprobe (media), numpy (signal math), whisper.cpp (STT), Python ≥ 3.12, uv (dev).
 - Soul: **signal extraction + deterministic heuristics + configurable scoring + local media processing.**
   This is an engineering problem — measurable signals combined reproducibly — NOT an LLM wrapper, NOT a

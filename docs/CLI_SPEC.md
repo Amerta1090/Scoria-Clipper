@@ -15,6 +15,11 @@ Shortcut for the explicit pipeline; never a different code path that could drift
 (`run` calls the same library entry points as the stage commands). Caption sidecars are built by the
 render step (`captions/`), previews + `report.html` by the report step.
 
+Two cut modes: default is the center 9:16 crop; `-p/--profile gaming` (or `reframe.mode: gamer`
+in config) selects the two-zone gamer layout — gameplay zone (top, center-anchored crop) +
+facecam PiP zone (bottom, configured region), vstack composited (Sprint 12). Profiles may
+override non-scoring sections including reframe (CONFIGURATION §2).
+
 ```
 Options:
   -o, --output <dir>       project dir  (default: <video>.scoria/)
@@ -26,7 +31,7 @@ Options:
   --no-captions            skip captions entirely (no sidecars, no burn)
   --vertical / --no-vertical   force 9:16 output (default: vertical; --no-vertical is
                            post-MVP and exits 2 — MVP output is always center-reframed 9:16)
-  --reframe center         (faces/target = post-MVP; MVP accepts only center)
+  --reframe center         (faces/target = post-MVP; MVP accepts only center and gamer)
   --keep-temp              do not delete analysis temporaries
   --overwrite              overwrite existing project dir
   --log-level <level>      debug|info|warning|error (default info)

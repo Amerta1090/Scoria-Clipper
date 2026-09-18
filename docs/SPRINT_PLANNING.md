@@ -142,6 +142,39 @@ no network at runtime, every sprint's artifacts round-trip through the serializa
 - **Definition of done:** `clipper v.mp4 --top 3` is the one-command proof; docs accurate.
 - **Risks:** last-mile integration bugs (flag vs config precedence) → dedicated e2e cases.
 
+## Sprint 12 — Gamer two-zone reframe
+
+- **Objective:** `--profile gaming` produces two-zone 1080×1920 clips; default run unchanged.
+- **Deliverables:** `ReframePlan` v2 (`layout` strategy + `zones`), `reframe.geometry` gamer plan builder,
+  `render/graph` vstack composite + burn position, `gaming` profile reframe keys, CONFIGURATION/CLI_SPEC/ARCHITECTURE updates.
+- **Dependencies:** S8 (geometry/even rules), S9 (render graph).
+- **Tests:** L0 zone geometry goldens (16:9, 4:3, 9:16 inputs; even dims, full cover, no overlap;
+  byte-stable twice); L0 config validation (fraction ∈ (0,1), region ⊂ [0,1]², canvas tiling);
+  L3 ffmpeg composite → 1080×1920 + vstack acceptance on ffmpeg 9.0.1; regression default run still
+  center; L4 full run with gaming profile byte-identical (corpus + clips).
+- **Acceptance criteria:** `clipper run X --profile gaming` → 3 two-zone clips; `clipper run X` → center
+  (regression); determinism green incl. gamer profile.
+- **Definition of done:** above green; docs in same change; SPRINT_STATUS flip.
+- **Risks:** vstack on ffmpeg 9.0.1 (probe L3 early); even-rounding per zone must sum exactly (assert);
+  existing `gaming`-profile users now get gamer output — intended, documented as drift (CONFIGURATION §2).
+
+## Sprint 13 — Captions-actual (offline-verifiable)
+
+- **Objective:** captions render in clips; provable offline and in CI; real whisper available on this machine.
+- **Deliverables:** `transcript.path` ingest (+ validation + manifest stamp), fixture golden SRT/ASS,
+  captions-on L4, burn-smoke test (env-gated on libass), DEPENDENCIES AUR whisper install doc, sample
+  run with burn.
+- **Dependencies:** S7 (captions), S12 (burn position on composite).
+- **Tests:** L1 transcript-path ingest (valid / schema-broken / missing-words → hard error, not silent);
+  golden SRT/ASS byte-match with aligned fixture; L4 captions-on determinism (no whisper needed);
+  burn-smoke (`libass` gate); ADR-018 readability bounds.
+- **Acceptance criteria:** captions-on L4 green in default suite; sample run local →
+  `render.json.burn=True` + visually confirmed captions (whisper installed) OR documented offline
+  demo on aligned fixture.
+- **Definition of done:** above green; docs; ADR-021 for `transcript.path`; SPRINT_STATUS flip.
+- **Risks:** no network → whisper never installable here (offline demo path still proves correctness);
+  fontconfig must ship a usable font for libass burn (Arch default ok; DEPENDENCIES §1).
+
 ## Sequencing notes (deviations from initial draft)
 
 - **S4 drags a minimal scene-detection from S8/Svisual** — candidates need scene boundaries *before* scoring,

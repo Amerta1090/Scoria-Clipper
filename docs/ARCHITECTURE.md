@@ -139,6 +139,13 @@ planning reference.
   removed), candidate generation relies on silence + scene boundaries only. An **enabled** STT that
   fails (model missing/checksum mismatch, binary absent, whisper errors) **fails the run** (exit 1)
   — degraded paths are only ever entered through the explicit flag.
+- **Offline ingest (`transcript.path`, Sprint 13):** when `transcript.enabled` and `transcript.path`
+  are set, the transcript stage loads + contract-validates a saved `transcript-info` document (schema
+  match, non-empty `words`, strictly monotonic timestamps) instead of running whisper.cpp — deterministic,
+  no STT binary needed, CI-safe. Broken docs fail the run (exit 1), never silent (ADR-021). Words flow
+  through the same normalization + sentence grouping as the whisper path, so a file-fed run is
+  byte-equivalent to whisper-fed for identical words; `manifest.json` stamps
+  `transcript_source: file|whisper.cpp` for provenance.
 
 ### 5.4 Boundaries & candidates (segment/)
 - Boundary sources, unioned and deduped within 50 ms:
@@ -186,7 +193,9 @@ What we control:
 - Whisper: fixed model file (sha256 recorded in `manifest.json`), greedy decoding, fixed threads.
   **Honest caveat:** whisper.cpp is deterministic for fixed binary+model+settings, but *across* builds/CPUs
   SIMD/rounding can differ; determinism is guaranteed for a fixed local install, and `manifest.json` makes
-  any drift detectable, not silently accepted.
+  any drift detectable, not silently accepted. The offline `transcript.path` ingest (ADR-021) sidesteps
+  STT variance entirely — a saved `transcript-info` doc re-derives the identical analysis section on any
+  host, keeping the full captions chain byte-reproducible without whisper.
 - ffmpeg: fixed filter chain, fixed thread count, `-nostdin`, and — for analysis — we consume only
   decimated/lossless intermediate data (PCM f32, raw gray frames), so analysis is robust to encoder variance.
 - Rendering: x264 is deterministic for a fixed build + fixed threads + fixed input. Pin thread count.
@@ -208,6 +217,10 @@ false`) instead of pretending.
 - Reframe:
   - MVP = center crop: crop width = round(source_h × 9/16) (to even), then scale → 1080×1920.
   - If source is already 9:16 → scale only. If source is portrait but narrower (<9:16) → blur-pad mode.
+  - Gamer layout (`mode: gamer`, Sprint 12): two zones tile the canvas exactly — gameplay zone
+    (center-anchored containing crop → scale) on top, facecam PiP zone (configured normalized region
+    crop → scale) on the bottom; `split=N` + `vstack` `filter_complex` composite, captions burn applied
+    after the composite. Deterministic closed-form regions (no RNG); default `center` unchanged.
   - Post-MVP focus modes (`faces`) live behind the same `reframe/` interface; MVP keeps the interface.
 - Captions: built in `captions/` (SRT + ASS). Burn-in aborts gracefully if libass unavailable → sidecar only.
 - Audio: **static-gain normalization** from measured integrated loudness (`ebur128` pass), applied as a

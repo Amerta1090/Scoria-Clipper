@@ -30,6 +30,8 @@ input:
 
 transcript:
   enabled: true
+  path: ""                    # "" = run whisper; set = load + validate a saved
+                              # transcript-info JSON instead (offline/deterministic)
   engine: whisper.cpp         # whisper.cpp | off (faster-whisper = post-MVP)
   binary: whisper-cli         # absolute path overrides PATH lookup
   model: "model/ggml-small.bin"
@@ -147,10 +149,16 @@ captions:
   safe_area_bottom: 0.25      # fraction of frame height reserved for captions
 
 reframe:
-  mode: center                # center | faces(post-MVP) | target
+  mode: center                # center | gamer | faces(post-MVP) | target
   focus: {x: 0.5, y: 0.5}     # used by mode: target
   blurbad_threshold: 1.78     # source ar > this → blur-pad instead of deep crop
   output: {width: 1080, height: 1920}
+  gamer:                      # mode: gamer — two-zone vertical stack (Sprint 12)
+    gameplay:
+      v_fraction: 0.60        # canvas-height share of the top (gameplay) zone; ∈ (0,1)
+      anchor: center          # source x-anchor (v1: center only)
+    facecam:
+      region: {x: 0.5, y: 0.78, w: 0.35, h: 0.20}  # normalized source PiP box (v1)
   smooth: {ema_alpha: 0.10, window_s: 0.5}   # post-MVP, unused by center
   even_dim: true              # crop dims rounded to even for chroma
 
@@ -191,6 +199,11 @@ Intent of each (validated by the fixture set in SCORING_ENGINE §8, not by feel)
 
 Each profile, when selected, is added to `manifest.json` so downstream users can see exactly what changed.
 
+Profiles may override non-scoring sections too: `gaming` also sets `reframe.mode: gamer`, so
+`clipper run X --profile gaming` produces the two-zone gamer layout (gameplay top + facecam
+bottom, §1 `reframe.gamer`) instead of the default center crop. Default `clipper run X` stays
+center — unchanged and regression-tested.
+
 ## 3. Validation rules (a selection)
 
 - `scoring.weights` values ≥ 0; renormalized enabled sum ∈ [0.99, 1.01] or config load error.
@@ -201,6 +214,11 @@ Each profile, when selected, is added to `manifest.json` so downstream users can
   minimum (ADR-018).
 - `reframe.output` must be ≥ 2× even dims, orientation 9:16 exactly (`w/h == 9/16`).
 - `audio.silence.min_duration ≤ segment.min_duration/10` sanity.
+- `reframe.gamer.gameplay.v_fraction ∈ (0,1)`; `reframe.gamer.facecam.region` ⊂ [0,1]² with `x+w ≤ 1` and
+  `y+h ≤ 1`. Both zones even-rounded and tile the `output` canvas exactly (no overlap, no gap).
+- `transcript.path` (when set with `transcript.enabled: true`): the file must exist and be a valid
+  `transcript-info` document (schema match, non-empty `words`, monotonic timestamps) — a broken doc is a
+  hard error (exit 1), never silent.
 - Unknown key → error. `transcript.enabled: false` auto-disables speech-dependent scoring terms with a
   warning and sets `renormalize_disabled: true` behavior (SCORING_ENGINE §5).
 
