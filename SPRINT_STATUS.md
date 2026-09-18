@@ -7,8 +7,11 @@ it at session end (same commit as the work or a `chore(status):` commit).
 > Last sprint: **Sprint 11 — Integration hardening** (status: **done**, this commit).
 > Current sprint: **none in progress** — Sprint 11 satisfies the M0 (MVP) criteria in PRD §8 (code-level; the
 > manual real-video cold-start check still needs a machine with whisper + STT, see Known risks).
-> Next action: pick up the next sprint from SPRINT_PLANNING.md / PRD backlog, or run the PRD §8 manual
-> cold-start on a whisper-capable machine (sample raw/ captures are already untracked in-repo).
+> Next action: **Sprint 12 — Gamer two-zone reframe** (SPRINT_PLANNING.md §S12): `--profile gaming` →
+> two-zone 1080×1920 clips (gameplay zone top + facecam PiP zone bottom, vstack composite), default
+> `clipper run X` stays center; then **Sprint 13 — Captions-actual** (§S13): `transcript.path` offline
+> ingest + captions-on L4 + AUR whisper install attempt. Sprint 12/13 planning docs + prompt.md update
+> landed in 3114505 (single docs commit).
 > Sprint 11 landed: one-shot `clipper run` (analyze→segment→score→rank→reframe→render→report) via the same
 > entry-point library code as the stage CLIs, `--json` full summary; demo/theme auto-detection + `--no-visual`,
 > `--no-transcript`, `--no-captions`, `--dry-run`; L4 cross-stage determinism suite (2 runs → byte-identical
