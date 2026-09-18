@@ -13,7 +13,7 @@ Test layering (bottom ↑) mirrors the architecture: pure functions → modules 
 | L1 module | `audio/` & `visual/` feature extraction against tiny generated media; `transcript/` against fixture JSON (no STT) | always |
 | L2 pipeline | analyze→score→rank on synthetic fixtures, golden JSON diff | always |
 | L3 integration | render: real ffmpeg trim/crop/scale/subs/encode → ffprobe assertions | gated (ffmpeg+libass present ~ always here) |
-| L4 determinism | two full runs → sha256 corpus comparison | nightly / `-- --determinism` |
+| L4 determinism | two full `run`s → sha256 corpus comparison (tests/test_run.py) | always (archlinux job) |
 | L5 e2e CLI | `clipper` subprocess commands incl. exit codes, `--json`, `verify-env` | always |
 
 ## 2. Deterministic fixtures
@@ -96,10 +96,11 @@ never allowed to break.
 
 ## 7. CI
 
-Stages: `uv sync` → `ruff check` → `ruff format --check` → pytest (L0–L3,L5) → nightly L4 (schedule).
-Gated: L4 nightly; e2e on tagged fixture media only. Network-sandboxed: pytest runs with no HTTP access
-(`block-network` plugin) to enforce offline runtime. CI image: archlinux with `ffmpeg`, or ubuntu-latest with
-`ffmpeg` for breadth; determinism tests run only on archlinux image (matches target).
+Stages: `uv sync` → `ruff check` → `ruff format --check` → pytest (L0–L5). CI image:
+archlinux with `ffmpeg` (matches the L4 determinism target); ubuntu-latest is a future
+breadth option. Network-sandboxed: pytest runs with no HTTP access (`block-network`
+plugin) to enforce offline runtime. Optional: a scheduled/nightly L4 job on other
+images is future work.
 
 ## 8. Coverage targets
 
