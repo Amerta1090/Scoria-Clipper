@@ -157,6 +157,31 @@ decisions are superseded, never edited retroactively.
 
 ---
 
+## ADR-022 — Gamer two-zone reframe: plan v2 + split/vstack composite (Sprint 12)
+- **Context:** The `gaming` profile existed since Sprint 8 but produced the same center-crop clips as every
+  other profile — its intended output was a let's-play vertical layout (gameplay + facecam PiP), which
+  requires geometry beyond the single-window center plan (`ReframePlan` v1: one crop/content/pad window).
+  Focus modes (`faces`/`target`) were already post-MVP, so the v2 plan had to stay closed-form and
+  deterministic with no new segments, RNG, or per-clip variation (a plan is still video-wide).
+- **Decision:** (1) `ReframePlan` v2 (`REFRAME_VERSION 2`, `plan.v2`) gains `layout: center|gamer` and
+  `zones: [GamerZone]`; v1 files still load (layout defaults to `center`, zones null). (2) `mode: gamer`
+  (selected by the `gaming` profile via `reframe.mode`) builds two zones that tile the 1080×1920 canvas
+  exactly: gameplay on top (`round_even(out_h × v_fraction)`, center-anchored cover-fit crop → scale) +
+  facecam PiP on the bottom (the remainder, from the configured normalized source region, cover-fitted
+  inside it). v1 lenses: `anchor: center` only; region/canvas config in `reframe.gamer`. (3) Render
+  composites with `split=2` + per-zone `crop,scale,setsar=1` + `vstack=inputs=2`, burning captions after
+  the composite. `setsar=1` is required: on this ffmpeg (9.0.1), naive `scale` preserves SAR and yields
+  fractional pixels (676:675 → DAR 169:300 ≈ 9:16, not literal 9:16), violating the exact-tiling
+  contract. (4) Existing `gaming`-profile users now get gamer output — intended, documented drift
+  (CONFIGURATION.md §2); default `clipper run X` stays center, regression-tested.
+- **Consequences:** the gamer path ship average-real-calibre verticals deterministically (L3 ffprobe +
+  L4 two-run byte-identical suite in the default pytest run); post-MVP focus modes extend `zones` (e.g.
+  per-zone anchor/region variants) without changing the v2 contract; `render.json` clip `filters` records
+  the exact composite per clip for provenance.
+- Status: **Accepted (Sprint 12).**
+
+---
+
 ## Open questions
 1. Default output vertical (9:16) even for portrait 4:3 sources — decided yes (blur-pad), but keep `--no-vertical` escape.
 2. Whether S4's folded-in "minimal scene detection" should formally become a `visual/` module in S2 rather than S4 — **Resolved in Sprint 4: `visual/` module exists (ADR-015), shipping scene changes only via scdet; motion deferred.**

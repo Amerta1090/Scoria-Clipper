@@ -211,3 +211,56 @@ def test_run_deterministic_cross_stage(tmp_path, planted):
     assert [p.name for p in clips_a] == [p.name for p in clips_b]
     for pa, pb in zip(clips_a, clips_b, strict=True):
         assert _sha256(pa) == _sha256(pb), f"clip stream differs: {pa.name}"
+
+
+# ---------------------------------------------------------------------------
+# Sprint 12: gamer two-zone reframe through the one-shot run
+# ---------------------------------------------------------------------------
+
+
+def test_run_gamer_profile_two_zone_clips(tmp_path, planted):
+    """`clipper run X --profile gaming` → two-zone reframe + 1080×1920 clips."""
+    out = tmp_path / "gamer_proj"
+    cfg = _run_cfg(tmp_path)
+    result = runner.invoke(
+        app, _run_args(planted, cfg, out, "--profile", "gaming", "--no-transcript", "--no-visual")
+    )
+    assert result.exit_code == 0, result.output
+    reframe = _json(out, "reframe.json")
+    assert reframe["layout"] == "gamer" and reframe["strategy"] is None
+    zones = reframe["zones"]
+    assert [z["role"] for z in zones] == ["gameplay", "facecam"]
+    assert sum(z["height"] for z in zones) == reframe["output"]["height"]
+    assert all(z["width"] == reframe["output"]["width"] for z in zones)
+    clips = sorted((out / "clips").glob("*.mp4"))
+    assert clips, "gamer run produced no clips"
+    assert all(_video_dims(clip) == OUT for clip in clips)
+    render = _json(out, "render.json")
+    assert all("vstack=inputs=2" in c["filters"] for c in render["clips"])
+
+
+def test_run_gamer_deterministic_cross_stage(tmp_path, planted):
+    """L4 gaming variant: two gamer runs → byte-identical corpus + clip streams."""
+    cfg = _run_cfg(tmp_path)
+    outs = [tmp_path / "gamer_a", tmp_path / "gamer_b"]
+    specs = []
+    for out in outs:
+        result = runner.invoke(
+            app,
+            _run_args(planted, cfg, out, "--profile", "gaming", "--no-transcript", "--no-visual"),
+        )
+        assert result.exit_code == 0, result.output
+        specs.append(_artifact_spec(out))
+
+    hashes = [
+        {name: _stable_hash(path, out) for name, path in spec.items()}
+        for spec, out in zip(specs, outs, strict=True)
+    ]
+    for name in hashes[0]:
+        assert hashes[0][name] == hashes[1][name], f"{name} differs between gamer runs"
+
+    clips_a = sorted((outs[0] / "clips").glob("*.mp4"))
+    clips_b = sorted((outs[1] / "clips").glob("*.mp4"))
+    assert [p.name for p in clips_a] == [p.name for p in clips_b]
+    for pa, pb in zip(clips_a, clips_b, strict=True):
+        assert _sha256(pa) == _sha256(pb), f"gamer clip stream differs: {pa.name}"

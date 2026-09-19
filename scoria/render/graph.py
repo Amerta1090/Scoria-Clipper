@@ -56,16 +56,22 @@ def escape_filter_path(path: Path) -> str:
 def build_video_chain(plan: ReframePlan):
     """Map a ReframePlan to (filter_complex, vf, map_label).
 
-    - strategy `scale`:   plain `-vf scale=W:H`, stream map `0:v:0`
-    - strategy `crop`:    plain `-vf crop=w:h:x:y,scale=W:H`, stream map `0:v:0`
-    - strategy `blur_pad`: filter_complex split → blurred full-frame backdrop +
-      contain-scaled content overlay (Sprint 9 graph from Sprint 8's L3 stub);
-      requires the explicit `-map [vout]` label.
+    - layout `center`, strategy `scale`:  plain `-vf scale=W:H`, stream map `0:v:0`
+    - layout `center`, strategy `crop`:   plain `-vf crop=w:h:x:y,scale=W:H`, map `0:v:0`
+    - layout `center`, strategy `blur_pad`: filter_complex split → blurred
+      full-frame backdrop + contain-scaled content overlay (Sprint 9 graph from
+      Sprint 8's L3 stub); requires the explicit `-map [vout]` label.
+    - layout `gamer` (Sprint 12): filter_complex `split=2` → per-zone
+      crop+scale → `vstack`, final label `[vout]`; requires the explicit
+      `-map [vout]` label.
 
-    Note: no `format=yuv420p` is passed to `overlay` — this ffmpeg build (9.0.1)
-    rejects it (Sprint 8 drift), and overlay defaults are yuv420p-compatible.
+    Note: no `format=yuv420p` is passed to `overlay`/`vstack` — this ffmpeg build
+    (9.0.1) rejects it (Sprint 8 drift), and overlay/vstack defaults are
+    yuv420p-compatible for these inputs.
     """
     out_w, out_h = plan.output.width, plan.output.height
+    if plan.layout == "gamer":
+        return _gamer_chain(plan.zones, out_w, out_h)
     if plan.strategy == "scale":
         return None, f"scale={out_w}:{out_h}", None
     if plan.strategy == "crop":
@@ -81,6 +87,29 @@ def build_video_chain(plan: ReframePlan):
         f"[bg2][fg2]overlay={pad.left}:{pad.top}[vout]"
     )
     return fc, None, "[vout]"
+
+
+def _gamer_chain(zones, out_w: int, out_h: int):
+    """vstack composite of the two-zone gamer stack (Sprint 12).
+
+    v1 lenses place both zones at `x=0` with full canvas width and heights that
+    sum exactly to `out_h` (`compute_gamer_zones` guarantees this by
+    construction), so a plain `vstack` reproduces the canvas exactly — no
+    overlay math. A degenerate or unexpected single-zone plan (out-of-contract
+    source) falls back to the plain scale path.
+    """
+    if zones is None or len(zones) != 2:
+        return None, f"scale={out_w}:{out_h}", None
+    game, cam = zones
+    parts = ["[0:v]split=2[game][cam]"]
+    for source_label, zone in (("[game]", game), ("[cam]", cam)):
+        crop = zone.crop
+        parts.append(
+            f"{source_label}crop={crop.width}:{crop.height}:{crop.x}:{crop.y},"
+            f"scale={zone.width}:{zone.height},setsar=1[{source_label[1:-1]}2]"
+        )
+    parts.append("[game2][cam2]vstack=inputs=2[vout]")
+    return ";".join(parts), None, "[vout]"
 
 
 def with_burn(fc: str | None, vf: str | None, label: str | None, ass_path: Path):

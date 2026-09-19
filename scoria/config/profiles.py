@@ -47,7 +47,10 @@ PROFILES: dict[str, dict[str, Any]] = {
                 "speech_density": 0.06,
                 "keyword_density": 0.03,
             }
-        }
+        },
+        "reframe": {
+            "mode": "gamer",
+        },
     },
     "talking-head": {
         "scoring": {

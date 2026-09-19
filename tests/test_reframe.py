@@ -28,9 +28,11 @@ from scoria.reframe import (
     REFRAME_VERSION,
     ContentDims,
     CropRect,
+    GamerZone,
     PadBars,
     compute_blur_pad,
     compute_crop,
+    compute_gamer_zones,
     plan_for_dims,
     round_even,
     strategy_for,
@@ -48,6 +50,11 @@ OUT = (1080, 1920)
 
 def _cfg(**kw) -> ReframeConfig:
     return build_config().reframe.model_copy(update=kw)
+
+
+def _gamer_cfg() -> ReframeConfig:
+    """The gaming profile's `gamer` reframe config (Sprint 12)."""
+    return build_config(profile="gaming").reframe
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +179,85 @@ def test_compute_crop_width_clamp_for_narrow_source():
 
 
 # ---------------------------------------------------------------------------
+# Sprint 12 L0: gamer two-zone geometry (mode: gamer)
+# ---------------------------------------------------------------------------
+
+
+def _assert_zone_invariants(
+    zones: list, source_w: int, source_h: int, out_w: int = OUT[0], out_h: int = OUT[1]
+) -> None:
+    """Even dims/offsets, in-bounds crops, full-cover, exact tiling — no overview."""
+    assert [z.role for z in zones] == ["gameplay", "facecam"]
+    assert sum(z.height for z in zones) == out_h
+    assert all(z.width == out_w and z.x == 0 for z in zones)
+    y = 0
+    for zone in zones:
+        assert zone.y == y, "zone must stack directly below the previous one"
+        y += zone.height
+    for zone in zones:
+        crop = zone.crop
+        assert crop.width > 0 and crop.height > 0
+        for value in (crop.x, crop.y, crop.width, crop.height):
+            assert value % 2 == 0, f"even-dim/chroma rule violated: {zone.role} {crop}"
+        assert crop.x >= 0 and crop.y >= 0
+        assert crop.x + crop.width <= source_w
+        assert crop.y + crop.height <= source_h
+
+
+def test_gamer_zones_16x9_golden():
+    zones = compute_gamer_zones(1920, 1080, *OUT, _gamer_cfg().gamer)
+    assert zones == [
+        GamerZone(
+            role="gameplay",
+            crop=CropRect(x=454, y=0, width=1012, height=1080),
+            x=0,
+            y=0,
+            width=1080,
+            height=1152,
+        ),
+        GamerZone(
+            role="facecam",
+            crop=CropRect(x=1144, y=842, width=304, height=216),
+            x=0,
+            y=1152,
+            width=1080,
+            height=768,
+        ),
+    ]
+
+
+def test_gamer_zones_geometry_table():
+    for source_w, source_h in [(1920, 1080), (640, 480), (360, 640)]:
+        zones = compute_gamer_zones(source_w, source_h, *OUT, _gamer_cfg().gamer)
+        _assert_zone_invariants(zones, source_w, source_h)
+
+
+def test_gamer_plan_builds_zones():
+    plan = plan_for_dims(1920, 1080, _gamer_cfg())
+    assert plan.mode == "gamer" and plan.layout == "gamer"
+    assert plan.strategy is None
+    assert plan.crop is None and plan.content is None and plan.pad is None
+    assert plan.zones is not None and len(plan.zones) == 2
+    assert plan.output.width == OUT[0] and plan.output.height == OUT[1]
+
+
+def test_gamer_plan_deterministic_twice():
+    assert plan_for_dims(1920, 1080, _gamer_cfg()) == plan_for_dims(1920, 1080, _gamer_cfg())
+    assert plan_for_dims(360, 640, _gamer_cfg()) == plan_for_dims(360, 640, _gamer_cfg())
+
+
+def test_gamer_custom_v_fraction_tiles_exactly():
+    base = _gamer_cfg().gamer
+    gamer = base.model_copy(
+        update={"gameplay": base.gameplay.model_copy(update={"v_fraction": 0.35})}
+    )
+    zones = compute_gamer_zones(1920, 1080, *OUT, gamer)
+    assert zones[0].height == 672  # round_even(1920 × 0.35)
+    assert zones[1].height == 1920 - 672
+    _assert_zone_invariants(zones, 1920, 1080)
+
+
+# ---------------------------------------------------------------------------
 # L5: clipper reframe
 # ---------------------------------------------------------------------------
 
@@ -215,6 +301,32 @@ def test_reframe_cli_rejects_post_mvp_mode(tmp_path):
     assert result.exit_code == 1
     assert "post-MVP" in result.output
     assert not (project / "reframe.json").exists()
+
+
+def test_reframe_cli_gamer_profile_writes_zones(tmp_path):
+    project = _project_with_analysis(tmp_path, "proj-gamer")
+    result = runner.invoke(app, ["reframe", str(project), "-p", "gaming"])
+    assert result.exit_code == 0, result.output
+    plan = json.loads((project / "reframe.json").read_text(encoding="utf-8"))
+    assert check_contract(plan) == []
+    assert plan["schema"] == REFRAME_SCHEMA
+    assert plan["version"] == REFRAME_VERSION
+    assert plan["reframe_version"] == REFRAME_PLAN_VERSION
+    assert plan["layout"] == "gamer" and plan["strategy"] is None
+    zones = plan["zones"]
+    assert [z["role"] for z in zones] == ["gameplay", "facecam"]
+    assert sum(z["height"] for z in zones) == plan["output"]["height"]
+    assert all(z["width"] == plan["output"]["width"] for z in zones)
+
+
+def test_reframe_cli_gamer_json_summary(tmp_path):
+    project = _project_with_analysis(tmp_path, "proj-gamer2")
+    result = runner.invoke(app, ["reframe", str(project), "-p", "gaming", "--json"])
+    assert result.exit_code == 0, result.output
+    summary = json.loads(result.stdout.strip().splitlines()[-1])
+    assert summary["layout"] == "gamer" and summary["strategy"] is None
+    assert len(summary["zones"]) == 2
+    assert summary["reframe_version"] == REFRAME_PLAN_VERSION
 
 
 def test_reframe_cli_bad_document(tmp_path):
@@ -326,6 +438,41 @@ def test_l3_blur_pad_render_dims(tmp_path, ultra_wide):
             "ultrafast",
             "-crf",
             "30",
+            str(target),
+        ]
+    )
+    assert _video_dimensions(target) == OUT
+
+
+def test_l3_gamer_composite_dims(tmp_path, landscape):
+    """16:9 640×360 → two-zone gamer vstack → exact 1080×1920 (Sprint 12).
+
+    The sprint's named risk: vstack acceptance on this ffmpeg build (9.0.1).
+    """
+    plan = plan_for_dims(640, 360, _gamer_cfg())
+    assert plan.layout == "gamer" and plan.strategy is None
+    target = tmp_path / "gamer_16x9.mp4"
+    fc, vf, label = build_video_chain(plan)
+    assert fc is not None and vf is None and label == "[vout]"
+    assert "vstack=inputs=2" in fc and "setsar=1" in fc
+    run_ffmpeg(
+        [
+            "-y",
+            "-i",
+            str(landscape),
+            "-filter_complex",
+            fc,
+            "-map",
+            label,
+            "-pix_fmt",
+            "yuv420p",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "30",
+            "-an",
             str(target),
         ]
     )

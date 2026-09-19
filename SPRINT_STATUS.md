@@ -4,20 +4,19 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 11 — Integration hardening** (status: **done**, this commit).
-> Current sprint: **none in progress** — Sprint 11 satisfies the M0 (MVP) criteria in PRD §8 (code-level; the
-> manual real-video cold-start check still needs a machine with whisper + STT, see Known risks).
-> Next action: **Sprint 12 — Gamer two-zone reframe** (SPRINT_PLANNING.md §S12): `--profile gaming` →
-> two-zone 1080×1920 clips (gameplay zone top + facecam PiP zone bottom, vstack composite), default
-> `clipper run X` stays center; then **Sprint 13 — Captions-actual** (§S13): `transcript.path` offline
-> ingest + captions-on L4 + AUR whisper install attempt. Sprint 12/13 planning docs + prompt.md update
-> landed in 3114505 (single docs commit).
-> Sprint 11 landed: one-shot `clipper run` (analyze→segment→score→rank→reframe→render→report) via the same
-> entry-point library code as the stage CLIs, `--json` full summary; demo/theme auto-detection + `--no-visual`,
-> `--no-transcript`, `--no-captions`, `--dry-run`; L4 cross-stage determinism suite (2 runs → byte-identical
-> JSON corpus + clip streams, project paths normalized to `<proj>`); degraded-mode matrix; README quickstart;
-> AUR-ready packaging metadata (MIT license + classifiers + project.urls); CHANGELOG.md; doc cross-link check.
-> 331 passed + 1 skip green, ruff check + format clean, wheel metadata valid.
+> Last sprint: **Sprint 12 — Gamer two-zone reframe** (status: **done**, this commit).
+> Current sprint: **none in progress** — Sprint 12 lands the two-zone gamer layout; Sprint 11's M0 (MVP)
+> criteria in PRD §8 remain satisfied at code level (the manual real-video cold-start check still needs a
+> machine with whisper + STT, see Known risks).
+> Next action: **Sprint 13 — Captions-actual** (SPRINT_PLANNING.md §S13): `transcript.path` offline
+> ingest (ADR-021) + captions-on L4 + AUR whisper install attempt. S13 is the last planned sprint;
+> ROADMAP.md marks captions-actual + gamer as the two shipping-purpose sprints.
+> Sprint 12 landed: `reframe.json` plan v2 (plan.v2, `layout: center|gamer` + `zones`); `--profile gaming`
+> → `clipper run X --profile gaming` produces two-zone 1080×1920 clips (gameplay cover-fit top +
+> facecam PiP bottom, `reframe.gamer` config with `v_fraction`/region validation), composited via
+> `split=2`+`vstack` filter_complex with `setsar=1` square pixels (ADR-022); default `clipper run X` stays
+> center (regression-tested); CLI_SPEC/ARCHITECTURE/CONFIGURATION updated; ADR-022; 350 passed + 1 skip
+> green, ruff check + format clean.
 
 ## Milestone
 
@@ -39,6 +38,7 @@ it at session end (same commit as the work or a `chore(status):` commit).
 | 9 | FFmpeg rendering | **done** | render/ module: keyed-clip graph (build_video_chain/plan_for_dims/with_burn/escape_filter_path), `-f mp4` muxer pin, atomic `.part` → rename, deterministic keyed surface, `clipper render` (crf/preset/burn/no-burn/--force/--no-burn/-o/--project-dir), captions degradation, this commit |
 | 10 | Preview/report/explain | **done** | report/ module: stills + hstack contact sheets + SVG timeline + previews.json + report.html; explain text/json/yaml; `clipper report`/`preview`/`explain` (ADR-020), this commit |
 | 11 | Integration hardening | **done** | one-shot `run` (full chain + `--json` summary), L4 cross-stage determinism in default suite, degraded-mode matrix, README quickstart, AUR-ready packaging metadata (MIT + classifiers + URLs), CHANGELOG, doc cross-link check, this commit |
+| 12 | Gamer two-zone reframe | **done** | `reframe.gamer` config (+validation), plan v2 (`layout`+`zones`), cover_crop + compute_gamer_zones geometry, `--profile gaming` → split+vstack 1080×1920 clips, CLI/ARCHITECTURE/CONFIGURATION updates, ADR-022, default run stays center, this commit |
 
 ## Control of work
 
@@ -155,6 +155,16 @@ get a DECISIONS.md ADR.)_
 - Sprint 11: degraded-mode tests always run with `--no-transcript` — whisper.cpp is not installed on this
   machine, so a bare `clipper run` exits 1 (missing STT) by design; the degradation path is contract-tested
   via the flag matrix.
+- Sprint 12: the gamer composite needs `setsar=1` per zone — this ffmpeg (9.0.1) `scale` preserves SAR, so
+  an unscaled vstack yields fractional pixels (676:675 → DAR 169:300 ≈ 9:16) instead of literal 9:16.
+  Deterministic either way, but the exact-tiling contract wants square pixels; see ARCHITECTURE.md §9 +
+  ADR-022.
+- Sprint 12: `reframe.json` went v1 → v2 (`plan.v2`, `layout` + `zones`). Old v1 files still load:
+  `layout` defaults to `center`, `zones` null — backward compatible by construction.
+- Sprint 12: the Sprint 8 post-MVP guard was **relaxed** in the CLI (`clipper reframe` / `run` now accept
+  `center` + `gamer`); `faces`/`target` still exit 1 (message now names both MVP modes).
+- Sprint 12: existing `gaming`-profile users now get gamer output — intended, documented drift
+  (CONFIGURATION.md §2); default `clipper run X` (center) is regression-tested in the default suite.
 
 ## Known risks / watch items
 

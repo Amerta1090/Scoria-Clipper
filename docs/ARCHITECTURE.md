@@ -221,6 +221,9 @@ false`) instead of pretending.
     (center-anchored containing crop → scale) on top, facecam PiP zone (configured normalized region
     crop → scale) on the bottom; `split=N` + `vstack` `filter_complex` composite, captions burn applied
     after the composite. Deterministic closed-form regions (no RNG); default `center` unchanged.
+    Each zone chain ends in `setsar=1` so the composite is exactly 1080×1920 with square pixels and a
+    literal 9:16 DAR — on this ffmpeg build (9.0.1), naive `scale` computes fractional SAR
+    (e.g. 676:675 → DAR 169:300 ≈ 9:16), which would violate the exact-tiling contract.
   - Post-MVP focus modes (`faces`) live behind the same `reframe/` interface; MVP keeps the interface.
 - Captions: built in `captions/` (SRT + ASS). Burn-in aborts gracefully if libass unavailable → sidecar only.
 - Audio: **static-gain normalization** from measured integrated loudness (`ebur128` pass), applied as a

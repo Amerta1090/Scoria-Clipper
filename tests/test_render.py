@@ -133,6 +133,44 @@ def test_with_burn_vf_and_complex():
     assert fc2.endswith("[vout]subtitles=filename=/tmp/c0001.ass[vout2]")
 
 
+# ---------------------------------------------------------------------------
+# Sprint 12 L0: gamer vstack composite
+# ---------------------------------------------------------------------------
+
+
+def test_build_video_chain_gamer():
+    cfg = build_config(profile="gaming")
+    plan = plan_for_dims(1920, 1080, cfg.reframe)
+    assert plan.layout == "gamer"
+    fc, vf, label = build_video_chain(plan)
+    assert vf is None and label == "[vout]"
+    assert fc == (
+        "[0:v]split=2[game][cam];"
+        "[game]crop=1012:1080:454:0,scale=1080:1152,setsar=1[game2];"
+        "[cam]crop=304:216:1144:842,scale=1080:768,setsar=1[cam2];"
+        "[game2][cam2]vstack=inputs=2[vout]"
+    )
+
+
+def test_with_burn_gamer_composite():
+    cfg = build_config(profile="gaming")
+    plan = plan_for_dims(1920, 1080, cfg.reframe)
+    fc, vf, label = build_video_chain(plan)
+    fc2, vf2, label2 = with_burn(fc, vf, label, Path("/tmp/c0001.ass"))
+    assert vf2 is None and label2 == "[vout2]"
+    assert fc2.endswith("[vout]subtitles=filename=/tmp/c0001.ass[vout2]")
+
+
+def test_build_video_chain_gamer_degenerate_single_zone():
+    # Out-of-contract degenerate plan (zone list of one, from compute_gamer_zones
+    # on a <2×2 source) falls back to the plain scale path — totality, not a
+    # real-media path (ffprobe dims are ≥ 2 by contract).
+    plan = plan_for_dims(1920, 1080, build_config(profile="gaming").reframe)
+    plan = plan.model_copy(update={"zones": [plan.zones[0]]})
+    fc, vf, label = build_video_chain(plan)
+    assert fc is None and label is None and vf == "scale=1080:1920"
+
+
 def test_escape_filter_path():
     assert escape_filter_path(Path("/a b/c.ass")) == "/a b/c.ass"
     assert escape_filter_path(Path("/p:1/q,2'[x].ass")) == "/p\\:1/q\\,2\\'\\[x\\].ass"
@@ -311,6 +349,25 @@ def test_render_builds_missing_reframe(tmp_path, render_video):
     result = runner.invoke(app, ["render", str(ranking), "--log-level", "error"])
     assert result.exit_code == 0, result.output
     assert (tmp_path / "reframe.json").is_file()
+
+
+def test_render_gamer_profile_composite(tmp_path, render_video):
+    """`clipper render -p gaming --reframe` → gamer vstack plan + 1080×1920 clips."""
+    ranking = _render_project(tmp_path, render_video)
+    result = runner.invoke(
+        app, ["render", str(ranking), "-p", "gaming", "--reframe", "--log-level", "error"]
+    )
+    assert result.exit_code == 0, result.output
+    reframe = json.loads((tmp_path / "reframe.json").read_text(encoding="utf-8"))
+    assert reframe["layout"] == "gamer" and reframe["strategy"] is None
+    assert [z["role"] for z in reframe["zones"]] == ["gameplay", "facecam"]
+    assert sum(z["height"] for z in reframe["zones"]) == reframe["output"]["height"]
+    rdoc = json.loads((tmp_path / "render.json").read_text(encoding="utf-8"))
+    assert all("vstack=inputs=2" in c["filters"] for c in rdoc["clips"])
+    for clip_id in ("c0001", "c0002"):
+        assert _media_dims(tmp_path / "clips" / f"{clip_id}.mp4") == OUT
+    man = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert man["config"]["reframe"]["mode"] == "gamer"
 
 
 def test_render_skip_exists_and_force(tmp_path, render_video):

@@ -140,8 +140,8 @@ def _run_pipeline(
     """
     if not vertical:
         raise UsageError(
-            "--no-vertical is post-MVP; MVP one-shot output is always 9:16 via center reframe",
-            hint="omit --no-vertical (faces/target reframe modes land post-MVP)",
+            "--no-vertical is post-MVP; MVP output is always 9:16 (center crop or gamer stack)",
+            hint="omit --no-vertical (non-9:16 output lands post-MVP)",
         )
     overrides = _cli_overrides(
         output, no_transcript, no_visual, no_captions, reframe_mode, keep_temp, overwrite
@@ -173,12 +173,12 @@ def _run_pipeline(
     ranking_path = project_dir / "ranking.json"
     write_json(ranking_path, ranking)
 
-    # reframe (MVP: center 9:16 only)
-    if cfg.reframe.mode != "center":
+    # reframe (MVP: center 9:16, or the two-zone gamer stack via --profile gaming)
+    if cfg.reframe.mode not in ("center", "gamer"):
         raise PipelineError(
             f"reframe mode '{cfg.reframe.mode}' is post-MVP (faces/target are roadmap); "
-            "MVP accepts only 'center'",
-            hint="set reframe.mode: center in the config (or drop --reframe)",
+            "MVP accepts only 'center' and 'gamer'",
+            hint="set reframe.mode: center|gamer in the config (or drop --reframe)",
         )
     media_section = analysis.get("media")
     if not isinstance(media_section, dict) or media_section.get("schema") != "media-info":
@@ -243,7 +243,9 @@ def run(
     no_visual: bool = typer.Option(False, "--no-visual", help="Skip frame pass"),
     no_captions: bool = typer.Option(False, "--no-captions", help="Skip caption burn-in"),
     vertical: bool = typer.Option(True, "--vertical/--no-vertical", help="Force 9:16 output"),
-    reframe_mode: str | None = typer.Option(None, "--reframe", help="Reframe mode (MVP: center)"),
+    reframe_mode: str | None = typer.Option(
+        None, "--reframe", help="Reframe mode (MVP: center|gamer)"
+    ),
     keep_temp: bool = typer.Option(False, "--keep-temp", help="Keep analysis temporaries"),
     overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing project dir"),
     log_level: str = typer.Option("info", "--log-level", help="debug|info|warning|error"),
@@ -650,7 +652,12 @@ def _ranking_json_path(path: Path) -> Path:
     return path
 
 
-@app.command(help="Compute the 9:16 reframe plan (crop/blur-pad) from analysis.json (Sprint 8).")
+@app.command(
+    help=(
+        "Compute the 9:16 reframe plan (center crop/blur-pad or gamer two-zone stack)"
+        " from analysis.json (Sprint 8/12)."
+    )
+)
 @_cmd
 def reframe(
     path: Path = typer.Argument(..., help="analysis.json or a scoria project dir"),
@@ -661,11 +668,11 @@ def reframe(
 ):
     setup_logging(log_level)
     cfg = build_config(path=config_path, profile=profile)
-    if cfg.reframe.mode != "center":
+    if cfg.reframe.mode not in ("center", "gamer"):
         raise PipelineError(
             f"reframe mode '{cfg.reframe.mode}' is post-MVP (faces/target are roadmap); "
-            "MVP accepts only 'center'",
-            hint="set reframe.mode: center in the config (or drop --reframe)",
+            "MVP accepts only 'center' and 'gamer'",
+            hint="set reframe.mode: center|gamer in the config (or drop --reframe)",
         )
     analysis_path = _analysis_json_path(path)
     analysis = read_json(analysis_path)
@@ -683,11 +690,11 @@ def reframe(
     plan = build_reframe_plan(MediaInfo(**media), cfg)
     out_path = write_json(analysis_path.parent / "reframe.json", plan)
     logger.info(
-        "%dx%d ar %.4f -> strategy %s -> %s",
+        "%dx%d ar %.4f -> layout %s -> %s",
         plan.source.width,
         plan.source.height,
         plan.source.aspect_ratio,
-        plan.strategy,
+        plan.layout,
         out_path,
         extra={"stage": "reframe", "artifact": str(out_path)},
     )
@@ -695,12 +702,14 @@ def reframe(
         typer.echo(
             json.dumps(
                 {
+                    "layout": plan.layout,
                     "strategy": plan.strategy,
                     "source": normalize(plan.source),
                     "target": normalize(plan.output),
                     "crop": normalize(plan.crop),
                     "content": normalize(plan.content),
                     "pad": normalize(plan.pad),
+                    "zones": normalize(plan.zones),
                     "reframe_version": REFRAME_PLAN_VERSION,
                     "input": str(analysis_path),
                     "output": str(out_path),

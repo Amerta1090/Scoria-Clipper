@@ -374,11 +374,56 @@ class OutputConfig(StrictModel):
     height: int = Field(default=1920, ge=2)
 
 
+class RegionConfig(StrictModel):
+    """Normalized source rect feeding the facecam PiP zone (mode: gamer, v1)."""
+
+    x: float = Field(default=0.5, ge=0.0, le=1.0)
+    y: float = Field(default=0.78, ge=0.0, le=1.0)
+    w: float = Field(default=0.35, gt=0.0, le=1.0)
+    h: float = Field(default=0.20, gt=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _check_inside_unit_square(self) -> RegionConfig:
+        if self.x + self.w > 1.0 + 1e-9 or self.y + self.h > 1.0 + 1e-9:
+            raise ConfigError(
+                "reframe.gamer.facecam.region must fit inside [0,1]² "
+                f"(x+w ≤ 1 and y+h ≤ 1), got {self.model_dump()}"
+            )
+        return self
+
+
+class GameplayZoneConfig(StrictModel):
+    """Top zone of the two-zone stack: canvas-height share + x-anchor (mode: gamer, v1)."""
+
+    v_fraction: float = Field(default=0.60, gt=0.0, lt=1.0)
+    anchor: Literal["center"] = "center"  # v1: center-anchored crop only
+
+
+class FacecamZoneConfig(StrictModel):
+    """Bottom zone of the two-zone stack: normalized source PiP box (mode: gamer, v1)."""
+
+    region: RegionConfig = Field(default_factory=RegionConfig)
+
+
+class GamerConfig(StrictModel):
+    """Two-zone vertical stack layout (CONFIGURATION.md §1 `reframe.gamer`, Sprint 12).
+
+    Gameplay zone on top (v_fraction of the canvas height, center-anchored cover-fit
+    crop → scale), facecam PiP zone on the bottom (the normalized source region,
+    cover-fitted inside it). Zones are even-dim, never overlap, and tile the output
+    canvas exactly.
+    """
+
+    gameplay: GameplayZoneConfig = Field(default_factory=GameplayZoneConfig)
+    facecam: FacecamZoneConfig = Field(default_factory=FacecamZoneConfig)
+
+
 class ReframeConfig(StrictModel):
-    mode: Literal["center", "faces", "target"] = "center"
+    mode: Literal["center", "gamer", "faces", "target"] = "center"
     focus: FocusConfig = Field(default_factory=FocusConfig)
     blurbad_threshold: float = Field(default=1.78, ge=0.0)
     output: OutputConfig = Field(default_factory=OutputConfig)
+    gamer: GamerConfig = Field(default_factory=GamerConfig)
     smooth: SmoothConfig = Field(default_factory=SmoothConfig)
     even_dim: bool = True
 

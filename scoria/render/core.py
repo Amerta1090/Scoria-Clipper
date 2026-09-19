@@ -74,7 +74,7 @@ def _reframe_plan(
         return ReframePlan(**read_json(reframe_path))
     plan = build_reframe_plan(_media_info(analysis, project_dir / "analysis.json"), cfg)
     write_json(reframe_path, plan)
-    logger.info("reframe plan %s -> %s", plan.strategy, reframe_path)
+    logger.info("reframe plan %s -> %s", plan.layout, reframe_path)
     return plan
 
 

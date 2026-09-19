@@ -186,3 +186,49 @@ def test_cli_overrides_merge_last(tmp_path):
 def test_focus_bounds():
     with pytest.raises(ConfigError):
         parse_config({"version": 1, "reframe": {"focus": {"x": 1.5, "y": 0.5}}})
+
+
+# ---------------------------------------------------------------------------
+# Sprint 12: gamer reframe config (reframe.gamer)
+# ---------------------------------------------------------------------------
+
+
+def test_gamer_defaults_valid_and_inside_unit_square():
+    gamer = default_config().reframe.gamer
+    assert 0.0 < gamer.gameplay.v_fraction < 1.0
+    assert gamer.gameplay.anchor == "center"
+    region = gamer.facecam.region
+    assert region.x + region.w <= 1.0 + 1e-9
+    assert region.y + region.h <= 1.0 + 1e-9
+    for value in (region.x, region.y, region.w, region.h):
+        assert 0.0 <= value <= 1.0
+
+
+def test_gaming_profile_selects_gamer_mode():
+    config = build_config(profile="gaming")
+    assert config.reframe.mode == "gamer"
+
+
+def test_gamer_v_fraction_bounds_rejected():
+    with pytest.raises(ConfigError):
+        parse_config({"version": 1, "reframe": {"gamer": {"gameplay": {"v_fraction": 1.0}}}})
+    with pytest.raises(ConfigError):
+        parse_config({"version": 1, "reframe": {"gamer": {"gameplay": {"v_fraction": 0.0}}}})
+    with pytest.raises(ConfigError):
+        parse_config({"version": 1, "reframe": {"gamer": {"gameplay": {"v_fraction": -0.2}}}})
+
+
+def test_gamer_region_must_fit_unit_square():
+    with pytest.raises(ConfigError):
+        parse_config(
+            {"version": 1, "reframe": {"gamer": {"facecam": {"region": {"x": 0.9, "w": 0.2}}}}}
+        )
+    with pytest.raises(ConfigError):
+        parse_config(
+            {"version": 1, "reframe": {"gamer": {"facecam": {"region": {"y": 0.9, "h": 0.2}}}}}
+        )
+
+
+def test_gamer_region_zero_size_rejected():
+    with pytest.raises(ConfigError):
+        parse_config({"version": 1, "reframe": {"gamer": {"facecam": {"region": {"w": 0.0}}}}})
