@@ -4,19 +4,17 @@ Live handoff tracker. The agent reads this at session start to resume exactly wh
 it at session end (same commit as the work or a `chore(status):` commit).
 
 > Baseline: docs + operating prompt only, no code yet. Repo initialized 2026-09-12.
-> Last sprint: **Sprint 12 — Gamer two-zone reframe** (status: **done**, this commit).
-> Current sprint: **none in progress** — Sprint 12 lands the two-zone gamer layout; Sprint 11's M0 (MVP)
-> criteria in PRD §8 remain satisfied at code level (the manual real-video cold-start check still needs a
-> machine with whisper + STT, see Known risks).
-> Next action: **Sprint 13 — Captions-actual** (SPRINT_PLANNING.md §S13): `transcript.path` offline
-> ingest (ADR-021) + captions-on L4 + AUR whisper install attempt. S13 is the last planned sprint;
-> ROADMAP.md marks captions-actual + gamer as the two shipping-purpose sprints.
-> Sprint 12 landed: `reframe.json` plan v2 (plan.v2, `layout: center|gamer` + `zones`); `--profile gaming`
-> → `clipper run X --profile gaming` produces two-zone 1080×1920 clips (gameplay cover-fit top +
-> facecam PiP bottom, `reframe.gamer` config with `v_fraction`/region validation), composited via
-> `split=2`+`vstack` filter_complex with `setsar=1` square pixels (ADR-022); default `clipper run X` stays
-> center (regression-tested); CLI_SPEC/ARCHITECTURE/CONFIGURATION updated; ADR-022; 350 passed + 1 skip
-> green, ruff check + format clean.
+> Last sprint: **Sprint 13 — Captions-actual** (status: **done**, this commit).
+> Current sprint: **none in progress** — S13 was the last planned sprint; all M0 (MVP) criteria at code
+> level (PRD §8) plus the gamer layout + offline caption route are green. Next candidates are M1 items
+> (ROADMAP.md): face-based reframing, opt-in loudnorm, faster-whisper engine, AUR packaging — and the
+> manual real-video cold-start check still needs a machine with whisper + network (see Known risks).
+> Sprint 13 landed: `transcript.path` offline ingest (ADR-021) — load + contract-validate a saved
+> `transcript-info` doc instead of running STT (broken doc → exit 1, never silent); manifest stamp
+> `transcript_source: file|whisper.cpp|None`; `verify-env` `transcript_file` row; aligned golden fixture
+> `transcript_info.json` (18 words / 4 sentences, ADR-013 segment hints preserved); captions-on L4
+> (two-run byte-identity incl. SRT/ASS sidecars) + burn-smoke in the default suite; sample run →
+> `render.json.burn=True` with burned-vs-bare pixel evidence; offline demo verified via `verify-env`.
 
 ## Milestone
 
@@ -39,6 +37,7 @@ it at session end (same commit as the work or a `chore(status):` commit).
 | 10 | Preview/report/explain | **done** | report/ module: stills + hstack contact sheets + SVG timeline + previews.json + report.html; explain text/json/yaml; `clipper report`/`preview`/`explain` (ADR-020), this commit |
 | 11 | Integration hardening | **done** | one-shot `run` (full chain + `--json` summary), L4 cross-stage determinism in default suite, degraded-mode matrix, README quickstart, AUR-ready packaging metadata (MIT + classifiers + URLs), CHANGELOG, doc cross-link check, this commit |
 | 12 | Gamer two-zone reframe | **done** | `reframe.gamer` config (+validation), plan v2 (`layout`+`zones`), cover_crop + compute_gamer_zones geometry, `--profile gaming` → split+vstack 1080×1920 clips, CLI/ARCHITECTURE/CONFIGURATION updates, ADR-022, default run stays center, this commit |
+| 13 | Captions-actual | **done** | `transcript.path` offline ingest (ADR-021): saved `transcript-info` doc replaces whisper.cpp — load + contract-validate (`scoria/transcript/file.py`, broken doc → exit 1), manifest `transcript_source` stamp, `verify-env` `transcript_file` row, aligned golden fixture `transcript_info.json`, captions-on L4 + burn-smoke in default suite, sample run with burn, README/CLI_SPEC/DEPENDENCIES/ROADMAP updates, this commit |
 
 ## Control of work
 
@@ -165,6 +164,18 @@ get a DECISIONS.md ADR.)_
   `center` + `gamer`); `faces`/`target` still exit 1 (message now names both MVP modes).
 - Sprint 12: existing `gaming`-profile users now get gamer output — intended, documented drift
   (CONFIGURATION.md §2); default `clipper run X` (center) is regression-tested in the default suite.
+- Sprint 13: file-ingest equality with the whisper path holds **under the 4-decimal serialization contract
+  (ADR-010)** — whisper computes `190·0.01 == 1.9000000000000001` while the doc stores literal `1.9`, so the
+  in-memory `TranscriptInfo` can differ in the last float bit; both pin to `1.9` on write and every on-disk
+  artifact (analysis.json onward) is byte-identical. The equality test asserts on `normalize(...)`, matching
+  the real contract.
+- Sprint 13: whisper-cli **remains absent** on this machine (network-blocked); the offline demo ran through
+  `transcript.path` and is the canonical verified path here. `model/ggml-small.bin` (488 MB) is present
+  (gitignored), so `verify-env` reports `whisper_model ok` while `whisper_cli` stays missing — real STT
+  still needs the AUR install (`paru -S whisper.cpp`, DEPENDENCIES §1) or a built binary.
+- Sprint 13: `verify-env` shows the `transcript_file` row only when the **active** config sets
+  `transcript.path` (config discovery is cwd-relative at import time: `./scoria.yaml`). No path → no row;
+  the default-config output is unchanged.
 
 ## Known risks / watch items
 
@@ -183,6 +194,9 @@ get a DECISIONS.md ADR.)_
   PRD §8.1).
 - Real-video sanity runs (STT latency, real boundary/cut quality, PRD §8 cold-start) use untracked captures
   in `sample raw/` (git-ignored; e.g. a live-streaming gamer video) — manual, never CI (TESTING.md §2.1).
+  Sprint 13's captions AC was satisfied by the documented **offline demo** (transcript.path on the aligned
+  fixture, `render.json.burn=True`, burned-frame pixel evidence) — real whisper STT through the whole chain
+  still awaits a machine with whisper + network.
 
 ## Agent reminder
 
