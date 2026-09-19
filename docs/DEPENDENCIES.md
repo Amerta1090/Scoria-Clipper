@@ -101,3 +101,10 @@ functions kept pure** so a future Rust port of scoring is mechanical. Recorded i
   never phones home.
 - "Local-first" is enforced by tests running in a network-sandboxed CI step (no HTTP in `scoria/` except the
   model-fetch helper, which is a separate `scoria fetch-model` command).
+- **Offline caption demo (Sprint 13 / ADR-021):** whisper.cpp is **not** a hard dependency for captions.
+  `transcript.path` loads a saved `transcript-info` document (a JSON snapshot of the transcript section of
+  `analysis.json`) and re-runs the whole transcript stage from it — no `whisper-cli`, no model, no network.
+  On a machine without whisper installed this is the verified demo path: `verify-env` reports a
+  `transcript_file` row for the configured doc, and a `clipper run` pointed at it produces captions +
+  libass burn-in exactly like a whisper-fed run (same words → byte-equivalent artifacts). The AUR install
+  (`paru -S whisper.cpp`, §1) still applies when real STT is wanted.

@@ -120,6 +120,7 @@ class VisualConfig(StrictModel):
 
 class TranscriptConfig(StrictModel):
     enabled: bool = True
+    path: str = ""  # "" = whisper.cpp; set = load a saved transcript-info doc
     engine: Literal["whisper.cpp", "off"] = "whisper.cpp"
     binary: str = "whisper-cli"
     model: str = "model/ggml-small.bin"

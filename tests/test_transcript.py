@@ -17,12 +17,14 @@ import pytest
 from scoria.config import build_config
 from scoria.errors import MissingDependencyError, TranscriptError
 from scoria.ingest import analyze_video
+from scoria.project import build_manifest, normalize
 from scoria.transcript import (
     SEGMENT_BREAK_MIN_GAP_S,
     TRANSCRIPT_SCHEMA,
     Word,
     analyze_transcript,
     group_sentences,
+    load_transcript_doc,
     normalize_words,
     parse_whisper,
     run_whisper,
@@ -32,6 +34,9 @@ from scoria.transcript import (
 
 FIXTURES = Path(__file__).parent / "fixtures"
 TRANSCRIPT_SMALL = FIXTURES / "transcript_small.json"
+# ADR-021 fixture: the golden `transcript-info` document saved by a whisper run —
+# same 18 words / 4 sentences as `transcript_small.json`, + segment_end_indices.
+TRANSCRIPT_INFO = FIXTURES / "transcript_info.json"
 
 
 def _cfg(**overrides):
@@ -355,8 +360,256 @@ def test_analyze_video_transcript_deterministic(tmp_path, planted, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Sprint 13 (ADR-021): transcript.path file ingest — load + contract-validate
+# ---------------------------------------------------------------------------
+
+
+def _write_doc(dir_path: Path, **overrides) -> Path:
+    """Minimal but valid transcript-info doc in `dir_path`; callers override fields."""
+    path = dir_path / "doc.json"
+    doc = {"schema": TRANSCRIPT_SCHEMA, "words": [{"text": "a", "start": 0.0, "end": 0.5}]}
+    doc.update(overrides)
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return path
+
+
+def test_load_transcript_doc_fixture_roundtrip():
+    loaded = load_transcript_doc(str(TRANSCRIPT_INFO))
+    assert loaded.engine == "whisper.cpp"
+    assert loaded.language == "id"
+    assert loaded.model == "model/ggml-small.bin"
+    assert loaded.model_sha256 == ""
+    assert loaded.greedy is True
+    assert loaded.threads == 4
+    assert len(loaded.words) == 18
+    first_words = [w.text for w in loaded.words][:6]
+    assert first_words == ["apakah", "kalian", "tahu", "cara", "membuat", "konten"]
+    assert loaded.segment_end_indices == SEGMENT_END_INDICES
+
+
+def test_load_transcript_doc_relative_path(tmp_path, monkeypatch):
+    import shutil
+
+    doc = tmp_path / "doc.json"
+    shutil.copy(TRANSCRIPT_INFO, doc)
+    monkeypatch.chdir(tmp_path)
+    loaded = load_transcript_doc("doc.json")
+    assert loaded.language == "id"
+    assert len(loaded.words) == 18
+
+
+def test_load_transcript_doc_missing_file(tmp_path):
+    with pytest.raises(TranscriptError, match="not found"):
+        load_transcript_doc(str(tmp_path / "nope.json"))
+
+
+def test_load_transcript_doc_invalid_json(tmp_path):
+    path = tmp_path / "bad.json"
+    path.write_text("{not json", encoding="utf-8")
+    with pytest.raises(TranscriptError, match="cannot read"):
+        load_transcript_doc(str(path))
+
+
+def test_load_transcript_doc_not_an_object(tmp_path):
+    path = tmp_path / "doc.json"
+    path.write_text("[1, 2]", encoding="utf-8")
+    with pytest.raises(TranscriptError, match="not a JSON object"):
+        load_transcript_doc(str(path))
+
+
+def test_load_transcript_doc_wrong_schema(tmp_path):
+    with pytest.raises(TranscriptError, match="schema mismatch"):
+        load_transcript_doc(str(_write_doc(tmp_path, schema="other")))
+
+
+def test_load_transcript_doc_missing_or_empty_words(tmp_path):
+    with pytest.raises(TranscriptError, match="no words"):
+        load_transcript_doc(str(_write_doc(tmp_path, words=[])))
+    with pytest.raises(TranscriptError, match="no words"):
+        load_transcript_doc(str(_write_doc(tmp_path, words={})))
+
+
+def test_load_transcript_doc_malformed_word_fields(tmp_path):
+    with pytest.raises(TranscriptError, match="not an object"):
+        load_transcript_doc(str(_write_doc(tmp_path, words=["a"])))
+    with pytest.raises(TranscriptError, match="text/start/end"):
+        load_transcript_doc(str(_write_doc(tmp_path, words=[{"text": "a"}])))
+    with pytest.raises(TranscriptError, match="text/start/end"):
+        load_transcript_doc(
+            str(_write_doc(tmp_path, words=[{"text": "a", "start": "0", "end": 1.0}]))
+        )
+
+
+def test_load_transcript_doc_invalid_span(tmp_path):
+    with pytest.raises(TranscriptError, match="invalid span"):
+        load_transcript_doc(
+            str(_write_doc(tmp_path, words=[{"text": "a", "start": 0.5, "end": 0.4}]))
+        )
+    with pytest.raises(TranscriptError, match="invalid span"):
+        load_transcript_doc(
+            str(_write_doc(tmp_path, words=[{"text": "a", "start": -1.0, "end": 0.4}]))
+        )
+
+
+def test_load_transcript_doc_overlapping_words(tmp_path):
+    with pytest.raises(TranscriptError, match="monotonic"):
+        load_transcript_doc(
+            str(
+                _write_doc(
+                    tmp_path,
+                    words=[
+                        {"text": "a", "start": 0.0, "end": 1.0},
+                        {"text": "b", "start": 0.5, "end": 1.5},
+                    ],
+                )
+            )
+        )
+
+
+def test_load_transcript_doc_whitespace_only_words_rejected(tmp_path):
+    doc = _write_doc(tmp_path, words=[{"text": "   ", "start": 0.0, "end": 1.0}])
+    with pytest.raises(TranscriptError, match="no usable words"):
+        load_transcript_doc(str(doc))
+
+
+def test_load_transcript_doc_zero_width_words_allowed(tmp_path):
+    loaded = load_transcript_doc(
+        str(
+            _write_doc(
+                tmp_path,
+                words=[
+                    {"text": "a", "start": 0.0, "end": 0.0},
+                    {"text": "b", "start": 0.0, "end": 0.5},
+                ],
+            )
+        )
+    )
+    assert [(w.text, w.start, w.end) for w in loaded.words] == [("a", 0.0, 0.0), ("b", 0.0, 0.5)]
+
+
+def test_load_transcript_doc_bad_segment_indices(tmp_path):
+    words = [
+        {"text": "a", "start": 0.0, "end": 0.5},
+        {"text": "b", "start": 0.6, "end": 1.0},
+    ]
+    with pytest.raises(TranscriptError, match="strictly increasing"):
+        load_transcript_doc(str(_write_doc(tmp_path, words=words, segment_end_indices=[0, 0])))
+    with pytest.raises(TranscriptError, match="invalid"):
+        load_transcript_doc(str(_write_doc(tmp_path, words=words, segment_end_indices=[2])))
+
+
+def test_analyze_transcript_file_equals_whisper_path(monkeypatch, tmp_path):
+    """ADR-021: identical words → byte-equivalent result on file and whisper paths."""
+    monkeypatch.setattr("scoria.transcript.pipeline.run_whisper", lambda *a, **k: _fixture_json())
+    whisper_info, wd = analyze_transcript(
+        tmp_path / "in.mp4", _cfg(transcript={"enabled": True}), temp_dir=tmp_path
+    )
+    assert wd == []
+    assert whisper_info is not None
+
+    file_info, fd = analyze_transcript(
+        tmp_path / "in.mp4",
+        _cfg(transcript={"enabled": True, "path": str(TRANSCRIPT_INFO)}),
+        temp_dir=tmp_path,
+    )
+    assert fd == []
+    assert file_info is not None
+    # Equal under the serialization contract: whisper computes 190·0.01 ==
+    # 1.9000000000000001 while the doc stores literal 1.9 — both pin to 1.9 on
+    # write, so the on-disk analysis.json (and every downstream artifact) is
+    # byte-identical between the two paths.
+    assert normalize(file_info.model_dump()) == normalize(whisper_info.model_dump())
+
+
+def test_analyze_transcript_file_never_runs_whisper(monkeypatch, tmp_path):
+    def _explode(*a, **k):
+        raise AssertionError("run_whisper must not be called for transcript.path ingest")
+
+    monkeypatch.setattr("scoria.transcript.pipeline.run_whisper", _explode)
+    info, degraded = analyze_transcript(
+        tmp_path / "in.mp4",
+        _cfg(transcript={"enabled": True, "path": str(TRANSCRIPT_INFO)}),
+        temp_dir=tmp_path,
+    )
+    assert degraded == []
+    assert info is not None
+    assert info.word_count == 18 and info.sentence_count == 4
+    assert info.engine == "whisper.cpp"  # provenance carried from the document
+    assert info.model == "model/ggml-small.bin"
+    assert info.segment_end_indices == SEGMENT_END_INDICES
+
+
+def test_analyze_transcript_file_hints_off(monkeypatch, tmp_path):
+    info, degraded = analyze_transcript(
+        tmp_path / "in.mp4",
+        _cfg(
+            transcript={
+                "enabled": True,
+                "path": str(TRANSCRIPT_INFO),
+                "segment_from_whisper": False,
+            }
+        ),
+        temp_dir=tmp_path,
+    )
+    assert degraded == []
+    assert info is not None
+    assert info.word_count == 18
+    assert info.segment_end_indices == []
+
+
+def test_analyze_transcript_file_broken_doc_raises(tmp_path):
+    cfg = _cfg(transcript={"enabled": True, "path": str(tmp_path / "missing.json")})
+    with pytest.raises(TranscriptError, match="not found"):
+        analyze_transcript(tmp_path / "in.mp4", cfg, temp_dir=tmp_path)
+
+
+# ---------------------------------------------------------------------------
 # tool info (manifest stamps)
 # ---------------------------------------------------------------------------
+
+
+def test_manifest_transcript_source_stamp():
+    tools = {"ffmpeg": None}
+    invocation = ["clipper", "run", "x.mp4"]
+    disabled = build_manifest(
+        config=_cfg(transcript={"enabled": False}), tools=tools, invocation=invocation
+    )
+    assert disabled["transcript_source"] is None
+    whisper = build_manifest(
+        config=_cfg(transcript={"enabled": True}), tools=tools, invocation=invocation
+    )
+    assert whisper["transcript_source"] == "whisper.cpp"
+    file_doc = build_manifest(
+        config=_cfg(transcript={"enabled": True, "path": str(TRANSCRIPT_INFO)}),
+        tools=tools,
+        invocation=invocation,
+    )
+    assert file_doc["transcript_source"] == "file"
+
+
+def test_envcheck_reports_transcript_file_tool(tmp_path, monkeypatch):
+    import scoria.envcheck as envcheck
+
+    cfg = _cfg(transcript={"enabled": True, "path": str(TRANSCRIPT_INFO)})
+    monkeypatch.setattr("scoria.envcheck.build_config", lambda: cfg)
+    report = envcheck.check()
+    assert report["tools"]["transcript_file"]["present"] is True
+    assert report["tools"]["transcript_file"]["version"] == "whisper.cpp"
+    assert report["tools"]["transcript_file"]["binary"] == str(TRANSCRIPT_INFO)
+    # default config (no path) never shows the tool
+    monkeypatch.setattr("scoria.envcheck.build_config", lambda: _cfg(transcript={"enabled": True}))
+    assert "transcript_file" not in envcheck.check()["tools"]
+
+
+def test_envcheck_transcript_file_missing(tmp_path, monkeypatch):
+    import scoria.envcheck as envcheck
+
+    missing = tmp_path / "nope.json"
+    cfg = _cfg(transcript={"enabled": True, "path": str(missing)})
+    monkeypatch.setattr("scoria.envcheck.build_config", lambda: cfg)
+    tool = envcheck.check()["tools"]["transcript_file"]
+    assert tool["present"] is False
+    assert tool["binary"] == str(missing)
 
 
 def test_whisper_cli_info_none_when_missing():

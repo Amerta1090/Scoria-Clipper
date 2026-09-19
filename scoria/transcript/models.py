@@ -14,6 +14,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 TRANSCRIPT_SCHEMA = "transcript-info"
 
+# Runtime engine provenance for `manifest.json.transcript_source` (ADR-021):
+# a run either invoked whisper.cpp or loaded a saved transcript-info doc.
+TRANSCRIPT_SOURCE_WHISPER = "whisper.cpp"
+TRANSCRIPT_SOURCE_FILE = "file"
+
 # whisper.cpp's raw time unit in the JSON: 1 `t_dtw` tick == 10 ms.
 DTW_TICK_SECONDS = 0.01
 
@@ -47,3 +52,7 @@ class TranscriptInfo(BaseModel):
     sentences: list[Sentence]
     word_count: int
     sentence_count: int
+    # Per-segment last-word indices from whisper.cpp (ADR-013) — the sentence
+    # grouping hints. Recorded in the doc so `transcript.path` ingest can
+    # reproduce the identical grouping without running whisper (ADR-021).
+    segment_end_indices: list[int] = Field(default_factory=list)

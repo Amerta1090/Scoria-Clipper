@@ -1,0 +1,231 @@
+{
+  "engine": "whisper.cpp",
+  "greedy": true,
+  "language": "id",
+  "model": "model/ggml-small.bin",
+  "model_sha256": "",
+  "schema": "transcript-info",
+  "segment_end_indices": [
+    2,
+    5,
+    10,
+    13,
+    14,
+    17
+  ],
+  "sentence_count": 4,
+  "sentences": [
+    {
+      "end": 1.9,
+      "start": 0.0,
+      "text": "Apakah kalian tahu cara membuat konten?",
+      "words": [
+        {
+          "end": 0.0,
+          "start": 0.0,
+          "text": "apakah"
+        },
+        {
+          "end": 0.24,
+          "start": 0.24,
+          "text": "kalian"
+        },
+        {
+          "end": 0.76,
+          "start": 0.76,
+          "text": "tahu"
+        },
+        {
+          "end": 0.76,
+          "start": 0.76,
+          "text": "cara"
+        },
+        {
+          "end": 1.5,
+          "start": 1.22,
+          "text": "membuat"
+        },
+        {
+          "end": 1.9,
+          "start": 1.9,
+          "text": "konten"
+        }
+      ]
+    },
+    {
+      "end": 3.65,
+      "start": 2.3,
+      "text": "Viral di tiktok, tanpa effort.",
+      "words": [
+        {
+          "end": 2.3,
+          "start": 2.3,
+          "text": "viral"
+        },
+        {
+          "end": 2.43,
+          "start": 2.43,
+          "text": "di"
+        },
+        {
+          "end": 3.04,
+          "start": 2.83,
+          "text": "tiktok,"
+        },
+        {
+          "end": 3.26,
+          "start": 3.26,
+          "text": "tanpa"
+        },
+        {
+          "end": 3.65,
+          "start": 3.65,
+          "text": "effort"
+        }
+      ]
+    },
+    {
+      "end": 8.0,
+      "start": 5.0,
+      "text": "Rahasia cuma satu sip.",
+      "words": [
+        {
+          "end": 5.38,
+          "start": 5.0,
+          "text": "rahasia"
+        },
+        {
+          "end": 5.5,
+          "start": 5.5,
+          "text": "cuma"
+        },
+        {
+          "end": 5.75,
+          "start": 5.75,
+          "text": "satu"
+        },
+        {
+          "end": 8.0,
+          "start": 8.0,
+          "text": "sip"
+        }
+      ]
+    },
+    {
+      "end": 10.4,
+      "start": 9.5,
+      "text": "Dan itu saja.",
+      "words": [
+        {
+          "end": 9.5,
+          "start": 9.5,
+          "text": "dan"
+        },
+        {
+          "end": 9.64,
+          "start": 9.64,
+          "text": "itu"
+        },
+        {
+          "end": 10.4,
+          "start": 10.4,
+          "text": "saja"
+        }
+      ]
+    }
+  ],
+  "threads": 4,
+  "word_count": 18,
+  "words": [
+    {
+      "end": 0.0,
+      "start": 0.0,
+      "text": "apakah"
+    },
+    {
+      "end": 0.24,
+      "start": 0.24,
+      "text": "kalian"
+    },
+    {
+      "end": 0.76,
+      "start": 0.76,
+      "text": "tahu"
+    },
+    {
+      "end": 0.76,
+      "start": 0.76,
+      "text": "cara"
+    },
+    {
+      "end": 1.5,
+      "start": 1.22,
+      "text": "membuat"
+    },
+    {
+      "end": 1.9,
+      "start": 1.9,
+      "text": "konten"
+    },
+    {
+      "end": 2.3,
+      "start": 2.3,
+      "text": "viral"
+    },
+    {
+      "end": 2.43,
+      "start": 2.43,
+      "text": "di"
+    },
+    {
+      "end": 3.04,
+      "start": 2.83,
+      "text": "tiktok,"
+    },
+    {
+      "end": 3.26,
+      "start": 3.26,
+      "text": "tanpa"
+    },
+    {
+      "end": 3.65,
+      "start": 3.65,
+      "text": "effort"
+    },
+    {
+      "end": 5.38,
+      "start": 5.0,
+      "text": "rahasia"
+    },
+    {
+      "end": 5.5,
+      "start": 5.5,
+      "text": "cuma"
+    },
+    {
+      "end": 5.75,
+      "start": 5.75,
+      "text": "satu"
+    },
+    {
+      "end": 8.0,
+      "start": 8.0,
+      "text": "sip"
+    },
+    {
+      "end": 9.5,
+      "start": 9.5,
+      "text": "dan"
+    },
+    {
+      "end": 9.64,
+      "start": 9.64,
+      "text": "itu"
+    },
+    {
+      "end": 10.4,
+      "start": 10.4,
+      "text": "saja"
+    }
+  ]
+}

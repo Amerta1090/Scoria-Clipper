@@ -20,10 +20,15 @@ from typer.testing import CliRunner
 
 from scoria.cli.main import app
 from scoria.ingest.ffprobe import probe
+from scoria.util import ffmpeg
 
 runner = CliRunner()
 
 OUT = (1080, 1920)
+
+# Sprint 13 (ADR-021): offline transcript-info doc — same 18 words as the
+# whisper golden; a run pointed at it never touches an STT binary.
+TRANSCRIPT_INFO = Path(__file__).parent / "fixtures" / "transcript_info.json"
 
 _RUN_CFG_YAML = (
     "media:\n"
@@ -67,6 +72,13 @@ def _json(project: Path, name: str) -> dict:
 def _run_cfg(tmp_path: Path) -> Path:
     cfg = tmp_path / "run.yaml"
     cfg.write_text(_RUN_CFG_YAML, encoding="utf-8")
+    return cfg
+
+
+def _transcript_run_cfg(tmp_path: Path) -> Path:
+    """Sprint 13: add `transcript.path` → offline ingest, no STT binary needed."""
+    cfg = tmp_path / "run.yaml"
+    cfg.write_text(_RUN_CFG_YAML + f"transcript:\n  path: {TRANSCRIPT_INFO}\n", encoding="utf-8")
     return cfg
 
 
@@ -264,3 +276,79 @@ def test_run_gamer_deterministic_cross_stage(tmp_path, planted):
     assert [p.name for p in clips_a] == [p.name for p in clips_b]
     for pa, pb in zip(clips_a, clips_b, strict=True):
         assert _sha256(pa) == _sha256(pb), f"gamer clip stream differs: {pa.name}"
+
+
+# ---------------------------------------------------------------------------
+# Sprint 13: captions-on run fed by `transcript.path` (ADR-021) — never STT
+# ---------------------------------------------------------------------------
+
+
+def test_run_transcript_path_captions_burn(tmp_path, planted):
+    """Offline transcript → scoring signal, caption sidecars, and (libass) burn."""
+    out = tmp_path / "proj"
+    cfg = _transcript_run_cfg(tmp_path)
+    result = runner.invoke(app, _run_args(planted, cfg, out, "--no-visual"))
+    assert result.exit_code == 0, result.output
+
+    transcript = _json(out, "analysis.json")["transcript"]
+    assert transcript["schema"] == "transcript-info"
+    assert transcript["word_count"] == 18
+    assert [s["text"] for s in transcript["sentences"]] == [
+        "Apakah kalian tahu cara membuat konten?",
+        "Viral di tiktok, tanpa effort.",
+        "Rahasia cuma satu sip.",
+        "Dan itu saja.",
+    ]
+
+    assert _json(out, "manifest.json")["transcript_source"] == "file"
+
+    # caption sidecars were built from the offline transcript words
+    cap_dir = out / "captions"
+    assert sorted(p.name for p in cap_dir.glob("*.srt")), "no SRT sidecars"
+    assert sorted(p.name for p in cap_dir.glob("*.ass")), "no ASS sidecars"
+    assert (cap_dir / "captions.json").is_file()
+
+    render = _json(out, "render.json")
+    if ffmpeg.has_filter("subtitles"):
+        assert render["burn"] is True
+        assert "captions_unavailable" not in render["degraded"]
+        assert "burn_sidecar_only" not in render["degraded"]
+    else:
+        assert render["burn"] is False
+        assert "burn_sidecar_only" in render["degraded"]
+
+    clips = sorted((out / "clips").glob("*.mp4"))
+    assert clips, "captions run produced no clips"
+    assert all(_video_dims(clip) == OUT for clip in clips)
+
+
+def test_run_transcript_path_deterministic_cross_stage(tmp_path, planted):
+    """L4 captions variant: two file-transcript runs → byte-identical corpus + clips."""
+    cfg = _transcript_run_cfg(tmp_path)
+    outs = [tmp_path / "cap_a", tmp_path / "cap_b"]
+    specs = []
+    for out in outs:
+        result = runner.invoke(app, _run_args(planted, cfg, out, "--no-visual"))
+        assert result.exit_code == 0, result.output
+        specs.append(_artifact_spec(out))
+
+    hashes = [
+        {name: _stable_hash(path, out) for name, path in spec.items()}
+        for spec, out in zip(specs, outs, strict=True)
+    ]
+    assert set(hashes[0]) == set(hashes[1])
+    for name in hashes[0]:
+        assert hashes[0][name] == hashes[1][name], f"{name} differs between captions runs"
+
+    # caption documents + sidecars are part of the deterministic corpus
+    caps_a = sorted((outs[0] / "captions").iterdir())
+    caps_b = sorted((outs[1] / "captions").iterdir())
+    assert [p.name for p in caps_a] == [p.name for p in caps_b]
+    for pa, pb in zip(caps_a, caps_b, strict=True):
+        assert _sha256(pa) == _sha256(pb), f"caption artifact differs: {pa.name}"
+
+    clips_a = sorted((outs[0] / "clips").glob("*.mp4"))
+    clips_b = sorted((outs[1] / "clips").glob("*.mp4"))
+    assert [p.name for p in clips_a] == [p.name for p in clips_b]
+    for pa, pb in zip(clips_a, clips_b, strict=True):
+        assert _sha256(pa) == _sha256(pb), f"clip stream differs: {pa.name}"

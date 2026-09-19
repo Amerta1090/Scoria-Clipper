@@ -158,7 +158,7 @@ no network at runtime, every sprint's artifacts round-trip through the serializa
 - **Risks:** vstack on ffmpeg 9.0.1 (probe L3 early); even-rounding per zone must sum exactly (assert);
   existing `gaming`-profile users now get gamer output — intended, documented as drift (CONFIGURATION §2).
 
-## Sprint 13 — Captions-actual (offline-verifiable)
+## Sprint 13 — Captions-actual (offline-verifiable) — **done**
 
 - **Objective:** captions render in clips; provable offline and in CI; real whisper available on this machine.
 - **Deliverables:** `transcript.path` ingest (+ validation + manifest stamp), fixture golden SRT/ASS,
@@ -174,6 +174,17 @@ no network at runtime, every sprint's artifacts round-trip through the serializa
 - **Definition of done:** above green; docs; ADR-021 for `transcript.path`; SPRINT_STATUS flip.
 - **Risks:** no network → whisper never installable here (offline demo path still proves correctness);
   fontconfig must ship a usable font for libass burn (Arch default ok; DEPENDENCIES §1).
+
+**Landed (Sprint 13):** `transcript.path` loads + validates a saved `transcript-info` document
+(`scoria/transcript/file.py` + `analyze_transcript` branch; broken doc → `TranscriptError`, exit 1, never
+silent); `manifest.json.transcript_source ∈ {file, whisper.cpp, null}`; `verify-env` gains a
+`transcript_file` row; fixture `tests/fixtures/transcript_info.json` = the whisper golden as a static doc
+(18 words / 4 sentences, `segment_end_indices` preserved, ADR-013 hints). Default-suite tests: file-ingest
+equality with the whisper path (under the 4-decimal contract), hard-error matrix, manifest stamps,
+captions-on L4 with two-run byte-identity incl. SRT/ASS sidecars, burn-smoke gated on libass. Sample run on
+the 4 s planted fixture → `render.json.burn=True`, burned-frame ≠ bare-frame pixel evidence in the caption
+band; `verify-env` reports the offline `transcript_file` tool. This is the **last planned sprint**;
+README/CLI_SPEC/DEPENDENCIES/ROADMAP/CONFIGURATION/ARCHITECTURE document the offline caption route.
 
 ## Sequencing notes (deviations from initial draft)
 

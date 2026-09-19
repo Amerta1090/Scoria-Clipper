@@ -19,6 +19,8 @@ Sprints 0–11. Produces the PRD §8 success criteria: one command from talking-
 - **Gamer two-zone reframe** (`reframe.mode: gamer`): deterministic split layout — gameplay zone
   (center-anchored crop) on top, facecam PiP zone on bottom, vstack composite (Sprint 12).
   Face-tracking/PiP auto-detect stays `faces` (ML variant, ADR-gated).
+- **Offline caption route** (`transcript.path`, Sprint 13, ADR-021): a saved `transcript-info` document
+  replaces whisper.cpp entirely — captions + burn provable without STT/network/CI secrets.
 - **Two-pass loudnorm** as an opt-in (`audio.method: loudnorm`), documented impact on determinism.
 - **faster-whisper engine option** (`transcript.engine: faster-whisper`) for people who want pip-only installs.
 - **Music/beat "energy mode"** — spectral features (onset, BPM) added as a `music` profile signal;

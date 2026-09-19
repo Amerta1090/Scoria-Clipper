@@ -36,7 +36,17 @@ uv run clipper video.mp4 --top 3            # one-shot: clips/ + captions/ + rep
 ```
 
 Requires Python >= 3.12, ffmpeg + ffprobe, and whisper.cpp if you want captions. Full
-stack: `docs/DEPENDENCIES.md`.
+stack: `docs/DEPENDENCIES.md`. No whisper binary on the machine? Point `transcript.path`
+at a saved `transcript-info` document (a JSON snapshot of one run's transcript section)
+and the transcript stage — captions, scoring, burn — runs fully offline (ADR-021);
+
+```bash
+cat > offline.yaml <<'YAML'
+transcript:
+  path: /path/to/transcript-info.json
+YAML
+uv run clipper run video.mp4 -c offline.yaml --no-visual    # burned captions, no STT
+```
 
 You can run the whole thing without speech-to-text: `--no-transcript` skips STT,
 `--no-visual` skips the frame pass, and `--no-captions` skips burning text into the

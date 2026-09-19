@@ -13,8 +13,8 @@ import numpy as np
 
 from scoria import __version__
 from scoria.config import build_config, default_config
-from scoria.errors import ConfigError
-from scoria.transcript import whisper_cli_info, whisper_model_info
+from scoria.errors import ConfigError, TranscriptError
+from scoria.transcript import load_transcript_doc, whisper_cli_info, whisper_model_info
 from scoria.util import ffmpeg
 
 REQUIRED_TOOLS = ("ffmpeg", "ffprobe")
@@ -56,6 +56,22 @@ def check() -> dict[str, Any]:
         "binary": model["path"],
     }
     tools["libass"] = {"present": ffmpeg.has_filter("subtitles"), "version": None, "binary": None}
+    if cfg.transcript.path:
+        # ADR-021 offline ingest: report whether the configured saved
+        # transcript-info document exists and validates (no whisper needed).
+        try:
+            loaded = load_transcript_doc(cfg.transcript.path)
+            tools["transcript_file"] = {
+                "present": True,
+                "version": loaded.engine,
+                "binary": cfg.transcript.path,
+            }
+        except TranscriptError:
+            tools["transcript_file"] = {
+                "present": False,
+                "version": None,
+                "binary": cfg.transcript.path,
+            }
     return {
         "scoria": __version__,
         "required_ok": all(tools[t]["present"] for t in REQUIRED_TOOLS),

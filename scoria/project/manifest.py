@@ -21,6 +21,13 @@ MANIFEST_SCHEMA = "project-manifest"
 MANIFEST_FILENAME = "manifest.json"
 
 
+def _transcript_source(config: ScoriaConfig) -> str | None:
+    """How this run's transcript was produced (ADR-021): file | whisper.cpp | None."""
+    if not config.transcript.enabled:
+        return None
+    return "file" if config.transcript.path else "whisper.cpp"
+
+
 def build_manifest(
     *,
     config: ScoriaConfig,
@@ -37,6 +44,7 @@ def build_manifest(
         "scoring_version": scoring_version or config.scoring.version,
         "tools": normalize(tools),
         "config": config.model_dump(mode="python"),
+        "transcript_source": _transcript_source(config),
         "invocation": list(invocation),
         "degraded": sorted(set(degraded)),
         "deterministic": deterministic,

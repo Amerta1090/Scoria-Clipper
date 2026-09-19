@@ -20,6 +20,20 @@ in config) selects the two-zone gamer layout — gameplay zone (top, center-anch
 facecam PiP zone (bottom, configured region), vstack composited (Sprint 12). Profiles may
 override non-scoring sections including reframe (CONFIGURATION §2).
 
+The transcript stage needs no whisper binary when the config sets `transcript.path`
+(ADR-021): it loads + contract-validates a saved `transcript-info` document instead of
+running STT, so captions/scoring work fully offline and CI-safe. Example:
+
+```yaml
+# run.yaml
+transcript:
+  path: analysis/transcript.json   # a saved transcript-info document
+```
+
+```bash
+clipper run video.mp4 -c run.yaml   # offline transcript from the doc
+```
+
 ```
 Options:
   -o, --output <dir>       project dir  (default: <video>.scoria/)
@@ -91,7 +105,9 @@ Alias for `report` limited to preview assets + timeline strip (no `report.html`)
 
 ### `clipper verify-env`
 Runs a self-check: ffmpeg/ffprobe presence + version, whisper binary presence, libass (subtitles filter)
-availability, model file presence/checksum. Zero network. Useful in scripts and for onboarding.
+availability, model file presence/checksum. When the active config sets `transcript.path`, it also validates
+that saved `transcript-info` document and reports a `transcript_file` tool row — the offline route needs no
+whisper binary or model. Zero network. Useful in scripts and for onboarding.
 
 ### `clipper fetch-model [--output <path>]`
 One-time network op: downloads the configured `transcript.model` from HuggingFace into `model/`,
@@ -109,6 +125,7 @@ clipper rank   proj/candidates.json -c tuned.yaml --top 5
 clipper explain proj c0001
 clipper render proj/ranking.json -o proj/clips
 clipper report proj
+clipper run video.mp4 -c offline.yaml --no-visual      # transcript.path → captions, no whisper/network
 ```
 
 ## 3. STDIN / scripting notes
